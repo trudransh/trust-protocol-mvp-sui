@@ -2,7 +2,7 @@
 import { useRouter } from 'next/navigation'
 import { ParticleBackground } from "@/components/home/particle-bg"
 import { ConnectButton } from "@/components/connect-button"
-import { useCurrentAccount } from '@mysten/dapp-kit'
+import { useWallet } from '@suiet/wallet-kit'
 import { X } from 'lucide-react'
 import { useEffect } from 'react'
 
@@ -14,15 +14,15 @@ export function WalletModal({
   onClose: () => void 
 }) {
   const router = useRouter()
-  const currentAccount = useCurrentAccount()
+  const { account } = useWallet()
 
   // Redirect when connected
   useEffect(() => {
-    if (currentAccount && isOpen) {
+    if (account && isOpen) {
       router.push("/dashboard")
       onClose()
     }
-  }, [currentAccount, isOpen, router, onClose])
+  }, [account, isOpen, router, onClose])
 
   if (!isOpen) return null
 

@@ -5,13 +5,12 @@ import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import Image from "next/image"
 import { Menu, X, Wallet } from "lucide-react"
-import { ConnectButton } from "@mysten/dapp-kit"
-import { useCurrentAccount } from "@mysten/dapp-kit"
-
+import { ConnectButton } from "@/components/connect-button"
+import { useWallet } from "@suiet/wallet-kit"
 export default function Header() {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [isWalletModalOpen, setIsWalletModalOpen] = useState(false)
-  const account = useCurrentAccount()
+  const { account, disconnect } = useWallet()
 
   const toggleMenu = () => setIsMenuOpen(!isMenuOpen)
   const toggleWalletModal = () => setIsWalletModalOpen(!isWalletModalOpen)
@@ -49,9 +48,22 @@ export default function Header() {
           {/* Wallet Connection Button - Desktop */}
           <div className="hidden md:block">
             {account ? (
-              <Button size="sm" variant="outline" className="text-primary-foreground border-primary-foreground">
-                {account.address.slice(0, 6)}...{account.address.slice(-4)}
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button 
+                  size="sm" 
+                  variant="outline" 
+                  className="text-primary-foreground border-primary-foreground"
+                >
+                  {account.address.slice(0, 6)}...{account.address.slice(-4)}
+                </Button>
+                <Button 
+                  size="sm" 
+                  variant="destructive" 
+                  onClick={() => disconnect()}
+                >
+                  Disconnect
+                </Button>
+              </div>
             ) : (
               <Button size="sm" onClick={toggleWalletModal} className="bg-primary text-white hover:bg-primary/90">
                 <Wallet className="w-4 h-4 mr-2" />

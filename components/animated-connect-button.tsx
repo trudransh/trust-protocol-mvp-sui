@@ -3,7 +3,7 @@
 import { useRef, useEffect, useState } from "react"
 import dynamic from "next/dynamic"
 import { motion, AnimatePresence } from "framer-motion"
-import { ConnectButton } from "@mysten/dapp-kit"
+import { ConnectButton } from "@/components/connect-button"
 import { X } from "lucide-react"
 
 export function AnimatedWalletConnect() {
