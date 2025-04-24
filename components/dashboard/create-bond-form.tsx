@@ -7,28 +7,27 @@ import { BondLoadingModal } from "@/components/bond-loading-modal";
 import Image from "next/image";
 import { toast } from "sonner";
 import { showTransactionToast } from "../showTransactionToast";
-import { useAccount, useReadContract } from "wagmi";
-import { createPublicClient, erc20Abi, formatUnits, http, parseUnits } from "viem";
+// import { useAccount, useReadContract } from "wagmi";
+// import { createPublicClient, erc20Abi, formatUnits, http, parseUnits } from "viem";
 import {
   CONTRACT_ADDRESSES,
-  CHAIN_ID,
   NULL_ADDRESS,
   ValidChainType,
 } from "@/lib/constants";
-import {
+// import {
 
-  waitForTransactionReceipt,
-  writeContract,
-} from "wagmi/actions";
-import { config } from "@/lib/wagmi-config";
+  // waitForTransactionReceipt,
+  // writeContract,
+// } from "wagmi/actions";
+// import { config } from "@/lib/wagmi-config";
 import { USER_FACTORY_ABI } from "@/abi/user-factory";
-import { createBond } from "@/lib/calls";
-import { isAddress } from "viem";
-import { useUserWalletFromRegistry } from "@/hooks/use-protocol";
-import { getEnsAddress, getEnsName } from "viem/actions";
-import { mainnet } from "viem/chains";
-import { normalize } from 'viem/ens'
-import { useChainId } from 'wagmi';
+import { buildCreateBondTx } from "@/lib/calls";
+// import { isAddress } from "viem";
+// import { useUserWalletFromRegistry } from "@/hooks/use-protocol";
+// import { getEnsAddress, getEnsName } from "viem/actions";
+// import { mainnet } from "viem/chains";
+// import { normalize } from 'viem/ens'
+// import { useChainId } from 'wagmi';
 import { X } from "lucide-react";
 
 

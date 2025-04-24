@@ -7,22 +7,12 @@ import { BondLoadingModal } from "@/components/bond-loading-modal";
 import Image from "next/image";
 import { toast } from "sonner";
 import { showTransactionToast } from "../showTransactionToast";
-import { useAccount, useReadContract } from "wagmi";
-import { erc20Abi, formatUnits, parseUnits } from "viem";
 import {
   CONTRACT_ADDRESSES,
-  DEFAULT_ASSET_ADDRESS_ERC20,
   NULL_ADDRESS,
 } from "@/lib/constants";
-import {
-  getEnsAddress,
-  waitForTransactionReceipt,
-  writeContract,
-} from "wagmi/actions";
-import { config } from "@/lib/wagmi-config";
 import { USER_FACTORY_ABI } from "@/abi/user-factory";
 import { createBond } from "@/lib/calls";
-import { isAddress } from "viem";
 import { USER_ABI } from "@/abi/user";
 import { useUserWalletFromRegistry } from "@/hooks/use-protocol";
 

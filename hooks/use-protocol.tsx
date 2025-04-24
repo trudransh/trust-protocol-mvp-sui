@@ -41,7 +41,6 @@ export const useUserData = (address?: string) => {
 export const useUserBonds = (address?: string) => {
   const client = useSuiClient();
   const currentAccount = useCurrentAccount();
-  currentAccount.
   
   // Use provided address or current connected wallet
   const userAddress = address || currentAccount?.address;
@@ -60,29 +59,25 @@ export const useUserBonds = (address?: string) => {
  * Hook to create a user profile
  */
 export const useCreateProfile = () => {
-  const { mutate: signAndExecuteTransaction } = useSignAndExecuteTransaction();
+  const { mutateAsync: signAndExecuteTransaction } = useSignAndExecuteTransaction();
   const queryClient = useQueryClient();
   const currentAccount = useCurrentAccount();
   
-  return useMutation<string, Error, { name: string }>({
-    mutationFn: async ({ name }) => {
-      if (!currentAccount?.address) {
-        throw new Error('Wallet not connected');
-      }
-      
+  return useMutation({
+    mutationFn: async (name: string) => {
       const tx = buildCreateProfileTx(name);
       const client = getSuiClient();
       
-      
-        client.signAndExecuteTransaction({
-            signer: currentAccount,
-            transaction: tx,
-            options: {
-                showEffects: true,
-                showObjectChanges: true,
-            },
-        });
-
+      const {digest} = await signAndExecuteTransaction({
+        transaction: tx,
+      });
+      return digest;
+    },
+    onSuccess: () => {
+      if (currentAccount?.address) {
+        queryClient.invalidateQueries({ queryKey: ['userData', currentAccount.address] });
+      }
+    }
   });
 };
 
@@ -109,21 +104,18 @@ export const useCreateBond = () => {
         throw new Error('You need to create a profile first');
       }
       
-      const tx = buildCreateBondTx(userData.profileId, counterpartyAddress, amount);
+      // Pass object with named parameters
+      const tx = buildCreateBondTx(
+        userData.profileId, 
+        counterpartyAddress, 
+        amount 
+      );
       
       return new Promise((resolve, reject) => {
         signAndExecute(
-          { transactionBlock: tx },
+          { transaction: tx },
           {
             onSuccess: (result) => {
-              // Extract bond ID if possible
-              if (result.effects) {
-                const createdObjects = extractCreatedObjects(result.effects);
-                if (createdObjects.length > 0) {
-                  resolve(createdObjects[0]); // Return the bond ID
-                  return;
-                }
-              }
               resolve(result.digest);
             },
             onError: (error) => {
@@ -134,7 +126,6 @@ export const useCreateBond = () => {
       });
     },
     onSuccess: () => {
-      // Invalidate queries
       if (currentAccount?.address) {
         queryClient.invalidateQueries({ queryKey: ['userData', currentAccount.address] });
         queryClient.invalidateQueries({ queryKey: ['userBonds', currentAccount.address] });
@@ -147,7 +138,7 @@ export const useCreateBond = () => {
  * Hook to join an existing bond
  */
 export const useJoinBond = () => {
-  const { mutate: signAndExecute } = useSignAndExecuteTransaction();
+  const { mutateAsync: signAndExecuteTransaction } = useSignAndExecuteTransaction();
   const queryClient = useQueryClient();
   const currentAccount = useCurrentAccount();
   const { data: userData } = useUserData();
@@ -167,20 +158,10 @@ export const useJoinBond = () => {
       }
       
       const tx = buildJoinBondTx(bondId, userData.profileId, amount);
-      
-      return new Promise((resolve, reject) => {
-        signAndExecute(
-          { transactionBlock: tx },
-          {
-            onSuccess: (result) => {
-              resolve(result.digest);
-            },
-            onError: (error) => {
-              reject(error);
-            },
-          }
-        );
+      const {digest} = await signAndExecuteTransaction({
+        transaction: tx,
       });
+      return digest;
     },
     onSuccess: () => {
       // Invalidate queries
@@ -196,7 +177,7 @@ export const useJoinBond = () => {
  * Hook to withdraw from a bond
  */
 export const useWithdrawBond = () => {
-  const { mutate: useSignAndExecuteTransaction } = useSignAndExecuteTransaction();
+  const { mutateAsync: SignAndExecuteTransaction } = useSignAndExecuteTransaction();
   const queryClient = useQueryClient();
   const currentAccount = useCurrentAccount();
   const { data: userData } = useUserData();
@@ -216,20 +197,10 @@ export const useWithdrawBond = () => {
       }
       
       const tx = buildWithdrawBondTx(bondId, userData.profileId);
-      
-      return new Promise((resolve, reject) => {
-        signAndExecute(
-          { transactionBlock: tx },
-          {
-            onSuccess: (result) => {
-              resolve(result.digest);
-            },
-            onError: (error) => {
-              reject(error);
-            },
-          }
-        );
+      const {digest} = await SignAndExecuteTransaction({
+        transaction: tx,
       });
+      return digest;
     },
     onSuccess: () => {
       // Invalidate queries
@@ -245,7 +216,7 @@ export const useWithdrawBond = () => {
  * Hook to break a bond
  */
 export const useBreakBond = () => {
-  const { mutate: signAndExecute } = useSignAndExecuteTransaction();
+  const { mutateAsync: signAndExecuteTransaction } = useSignAndExecuteTransaction();
   const queryClient = useQueryClient();
   const currentAccount = useCurrentAccount();
   const { data: userData } = useUserData();
@@ -265,20 +236,10 @@ export const useBreakBond = () => {
       }
       
       const tx = buildBreakBondTx(bondId, userData.profileId);
-      
-      return new Promise((resolve, reject) => {
-        signAndExecute(
-          { transactionBlock: tx },
-          {
-            onSuccess: (result) => {
-              resolve(result.digest);
-            },
-            onError: (error) => {
-              reject(error);
-            },
-          }
-        );
+      const {digest} = await signAndExecuteTransaction({
+        transaction: tx,
       });
+      return digest;
     },
     onSuccess: () => {
       // Invalidate queries
