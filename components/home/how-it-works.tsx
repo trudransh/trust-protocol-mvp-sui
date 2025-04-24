@@ -36,21 +36,16 @@ const steps = [
 export default function HowItWorks() {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const [windowSize, setWindowSize] = useState({ width: 0, height: 0 });
+  const [isMounted, setIsMounted] = useState(false);
 
   useEffect(() => {
-    if (typeof window !== "undefined") {
+    setIsMounted(true);
+    const handleResize = () => {
       setWindowSize({ width: window.innerWidth, height: window.innerHeight });
-
-      const handleResize = () => {
-        setWindowSize({ width: window.innerWidth, height: window.innerHeight });
-      };
-
-      window.addEventListener("resize", handleResize);
-
-      return () => {
-        window.removeEventListener("resize", handleResize);
-      };
-    }
+    };
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
   }, []);
 
   return (
@@ -114,19 +109,19 @@ export default function HowItWorks() {
                 </CardHeader>
                 <CardContent>
                   <p className="text-muted-foreground">{step.description}</p>
-                  <AnimatePresence></AnimatePresence>
+                  <AnimatePresence />
                 </CardContent>
               </Card>
             </motion.div>
           ))}
         </div>
 
-        {/* Floating Ethereum symbols */}
-        <div className="absolute inset-0 pointer-events-none">
-          {typeof window !== "undefined" &&
-            [...Array(10)].map((_, i) => (
+        {/* Floating Ethereum symbols - only render on client */}
+        {isMounted && windowSize.width > 0 && windowSize.height > 0 && (
+          <div className="absolute inset-0 pointer-events-none">
+            {[...Array(10)].map((_, i) => (
               <motion.div
-                key={i}
+                key={`floating-symbol-${i}`} // Unique key to avoid React key issues
                 className="absolute text-primary/20"
                 initial={{
                   x: Math.random() * windowSize.width,
@@ -147,7 +142,8 @@ export default function HowItWorks() {
                 <Shield />
               </motion.div>
             ))}
-        </div>
+          </div>
+        )}
       </section>
     </TooltipProvider>
   );
