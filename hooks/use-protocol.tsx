@@ -77,9 +77,23 @@ export const useUserData = (address?: string) => {
 
 export const useHasUserProfile = (userAddress: string) => {
   const client = useSuiClient();
-  return useQuery<boolean>({
+  return useQuery<boolean>({  
     queryKey: ['hasUserProfile', userAddress],
-    queryFn: async () => buildHasTrustProfileTx(client, userAddress),
+    queryFn: async () => {
+      const tx = buildHasTrustProfileTx(userAddress);
+      const response = await client.devInspectTransactionBlock({
+        sender: userAddress,
+        transactionBlock: tx,
+      });
+      // Extract return value from response and convert to boolean
+      const returnValue = response.results?.[0]?.returnValues?.[0];
+      if (!returnValue) {
+        return false;
+      }
+      // Convert to string first to safely handle any type
+      const stringValue = String(returnValue[0]);
+      return stringValue === '1' || stringValue === 'true';
+    }
   });
 };
 
