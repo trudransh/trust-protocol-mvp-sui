@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import { AnimatePresence } from "framer-motion";
+import { useState, useEffect } from "react";
+import { useCurrentAccount } from "@mysten/dapp-kit";
+import { AnimatePresence, motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -31,10 +32,15 @@ import {
 // Utility functions
 import { formatDecimal, formatNumber, formatAddress, truncateText } from "@/lib/utils";
 // Components
-import { OnBoardForm } from "@/components/dashboard/onboard-form";
+import { OnboardForm } from "@/components/dashboard/onboard-form";
 import { BondModal } from "@/components/bond-modal";
 import { AnimatedWalletConnect } from "@/components/animated-connect-button";
 import { BondLoadingModal } from "@/components/bond-loading-modal";
+
+import { useHasProfile, useUserProfile, useUserBonds } from "@/hooks/use-protocol";
+// import { NULL_ADDRESS } from "@/lib/constants";
+import { formatAmount } from "@/lib/utils";
+import truncateAddress from "@/lib/truncateAddress";
 
 // Sui-specific address truncation
 function truncateSuiAddress(address: string) {
@@ -86,56 +92,59 @@ const staticUserDetails = {
 };
 
 export default function Dashboard() {
-  // Wallet connection using Sui's useWallet hook (commented out)
-  // const { connected: isConnected, account } = useWallet();
-  // const address = account?.address;
-
-  // Fetch user data from Sui contracts (commented out)
-  // const { data: userWallet, isLoading: walletLoading } = useSuiUserWallet(
-  //   address ?? NULL_ADDRESS
-  // );
-  // const { data: userDetails, isLoading: userDetailsLoading } = useSuiUserDetails(
-  //   address ?? NULL_ADDRESS
-  // );
-
-  // State for bond modal
-  const [bondAddress, setBondAddress] = useState(undefined);
+  const currentAccount = useCurrentAccount();
+  const address = currentAccount?.address || NULL_ADDRESS;
+  
+  // Data fetching hooks
+  const { data: hasProfile, isLoading: profileCheckLoading, refetch: refetchProfileCheck } = useHasProfile();
+  const { data: userProfile, isLoading: profileLoading, refetch: refetchUserProfile } = useUserProfile({
+    enabled: !!hasProfile
+  });
+  const { data: userBonds, isLoading: bondsLoading, refetch: refetchUserBonds } = useUserBonds({
+    enabled: !!hasProfile
+  });
+  
+  // Modal states
+  const [selectedBondId, setSelectedBondId] = useState<string | undefined>(undefined);
   const [isBondModalOpen, setIsBondModalOpen] = useState(false);
-  const [bondModalType, setBondModalType] = useState("create");
-
-  // Modal states (commented out dynamic logic)
-  // const [showOnboardModal, setShowOnboardModal] = useState(false);
-  // const [showConnectModal, setShowConnectModal] = useState(false);
-
-  // Open OnBoard modal if userWallet is not registered (commented out)
-  // useEffect(() => {
-  //   if (!walletLoading && (userWallet === NULL_ADDRESS || !userWallet)) {
-  //     setShowOnboardModal(true);
-  //   } else {
-  //     setShowOnboardModal(false);
-  //   }
-  // }, [userWallet, walletLoading]);
-
-  // Open Wallet Connect modal if not connected (commented out)
-  // useEffect(() => {
-  //   if (!isConnected) {
-  //     setShowConnectModal(true);
-  //   } else {
-  //     setShowConnectModal(false);
-  //   }
-  // }, [isConnected]);
-
-  // Loading state (commented out)
-  // if (walletLoading) {
-  //   return <BondLoadingModal />;
-  // }
-
+  const [bondModalType, setBondModalType] = useState<'create' | 'withdraw' | 'break' | 'stake'>('create');
+  const [showOnboardModal, setShowOnboardModal] = useState(false);
+  
+  // Refetch all data after operations
+  const refetchData = async () => {
+    await Promise.all([
+      refetchProfileCheck(),
+      refetchUserProfile(),
+      refetchUserBonds()
+    ]);
+  };
+  
+  // Show onboarding if user has no profile
+  useEffect(() => {
+    if (!profileCheckLoading && hasProfile === false) {
+      setShowOnboardModal(true);
+    } else {
+      setShowOnboardModal(false);
+    }
+  }, [hasProfile, profileCheckLoading]);
+  
+  // Loading state
+  if (profileCheckLoading || (hasProfile && (profileLoading || bondsLoading))) {
+    return <BondLoadingModal />;
+  }
+  
+  // Calculate dashboard metrics
+  const totalValueLocked = userProfile ? userProfile.moneyInActiveBonds || 0 : 0;
+  const totalWithdrawnAmount = userProfile ? userProfile.moneyInWithdrawnBonds || 0 : 0;
+  const totalBrokenAmount = userProfile ? userProfile.moneyInBrokenBonds || 0 : 0;
+  const totalAmount = totalValueLocked + totalWithdrawnAmount + totalBrokenAmount;
+  
   return (
     <div className="min-h-screen bg-gradient-to-r from-[#cdffd8] to-[#94b9ff]">
       <main className="container mx-auto p-4 flex flex-col gap-8">
         {/* Header */}
         <div className="flex flex-col gap-2">
-          <h1 className="text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-primary to-[#94b9ff]">
+          <h1 className="text-4xl font-bold bg-clip-text text-primary">
             Trust Dashboard
           </h1>
           <p className="text-lg text-muted-foreground">
@@ -145,7 +154,7 @@ export default function Dashboard() {
 
         {/* Metrics */}
         <div className="grid gap-4 md:grid-cols-3">
-          <Card className="hover:shadow-lg transition-shadow">
+          <Card className="hover:shadow-lg bg-white/80 transition-shadow">
             <CardHeader className="pb-2">
               <div className="flex items-center gap-2">
                 <div className="p-2 rounded-full bg-primary/10">
@@ -158,28 +167,21 @@ export default function Dashboard() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                $
-                {staticUserDetails.totalAmount !== undefined &&
-                staticUserDetails.totalWithdrawnAmount !== undefined
-                  ? formatDecimal(
-                      Number(
-                        BigInt(staticUserDetails.totalAmount) -
-                          BigInt(staticUserDetails.totalWithdrawnAmount) -
-                          BigInt(staticUserDetails.totalBrokenAmount)
-                      ) / 1e9 // Assuming 9 decimals for SUI
-                    )
-                  : "N/A"}
+                ${formatAmount(totalValueLocked)}
               </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                Total Amount LifeTime $
-                {staticUserDetails.totalAmount !== undefined
-                  ? formatDecimal(Number(BigInt(staticUserDetails.totalAmount)) / 1e9)
-                  : "N/A"}
-              </p>
+              <div className="text-sm text-muted-foreground mt-1">
+                Total Withdrawn Amount: ${formatAmount(totalWithdrawnAmount)}
+              </div>
+              <div className="text-sm text-muted-foreground mt-1">
+                Total Broken Amount: ${formatAmount(totalBrokenAmount)}
+              </div>
+              <div className="text-sm text-muted-foreground mt-1">
+                Total Amount Lifetime: ${formatAmount(totalAmount)}
+              </div>
             </CardContent>
           </Card>
 
-          <Card className="hover:shadow-lg transition-shadow">
+          <Card className="hover:shadow-lg bg-white/80 transition-shadow">
             <CardHeader className="pb-2">
               <div className="flex items-center gap-2">
                 <div className="p-2 rounded-full bg-primary/10">
@@ -192,16 +194,21 @@ export default function Dashboard() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                {staticUserDetails.totalActiveBonds}
+                {userProfile?.activeBonds || 0}
               </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                {staticUserDetails.totalBrokenBonds} broken bonds,{" "}
-                {staticUserDetails.totalWithdrawnBonds} withdrawn bonds
-              </p>
+              <div className="text-sm text-muted-foreground mt-1">
+                Broken Bonds: {userProfile?.brokenBonds || 0}
+              </div>
+              <div className="text-sm text-muted-foreground mt-1">
+                Withdrawn Bonds: {userProfile?.withdrawnBonds || 0}
+              </div>
+              <div className="text-sm text-muted-foreground mt-1">
+                Total Bonds: {userProfile?.totalBonds || 0}
+              </div>
             </CardContent>
           </Card>
 
-          <Card className="hover:shadow-lg transition-shadow">
+          <Card className="hover:shadow-lg bg-white/80 transition-shadow">
             <CardHeader className="pb-2">
               <div className="flex items-center gap-2">
                 <div className="p-2 rounded-full bg-primary/10">
@@ -213,7 +220,12 @@ export default function Dashboard() {
               </div>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">Coming Soon</div>
+              <div className="text-2xl font-bold">
+                {userProfile?.trustScore || 100}
+              </div>
+              <div className="text-sm text-muted-foreground mt-1">
+                Based on your bond activity
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -229,11 +241,11 @@ export default function Dashboard() {
             </p>
           </div>
           <Button
-            // onClick={() => {
-            //   setIsBondModalOpen(true);
-            //   setBondModalType("create");
-            // }}
-            disabled
+            onClick={() => {
+              setIsBondModalOpen(true);
+              setBondModalType('create');
+              setSelectedBondId(undefined);
+            }}
             className="h-12 px-6 text-base whitespace-nowrap w-full sm:w-auto bg-[#0066FF] hover:bg-[#0052CC] text-white"
           >
             <LinkIcon className="mr-2 h-4 w-4" />
@@ -243,7 +255,7 @@ export default function Dashboard() {
 
         {/* Active Bonds Table */}
         <div className="mt-8 flex-1 overflow-hidden min-h-[400px]">
-          <Card className="h-full flex flex-col">
+          <Card className="h-full bg-white/80 flex flex-col">
             <CardHeader className="border-b">
               <h2 className="text-xl font-semibold">Active Bonds</h2>
             </CardHeader>
@@ -261,101 +273,106 @@ export default function Dashboard() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {staticUserDetails.bondsDetails.map((bond, index) => (
-                    <TableRow key={index} className="hover:bg-secondary/30">
-                      <TableCell className="font-medium flex items-center gap-2">
-                        <span className="bg-primary/10 p-1 rounded-full">
-                          <UserIcon className="w-4 h-4 text-primary" />
-                        </span>
-                        <UserResolver address={bond.counterPartyAddress} />
-                      </TableCell>
-                      <TableCell>
-                        <span
-                          className={`px-2 py-1 rounded-full text-xs ${
-                            bond.type === "two-way"
-                              ? "bg-green-100 text-green-800"
-                              : "bg-yellow-100 text-yellow-800"
-                          }`}
-                        >
-                          {bond.type}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <WalletIcon className="w-4 h-4 text-muted-foreground" />
-                          {formatDecimal(Number(BigInt(bond.yourStakeAmount)) / 1e9)}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <WalletIcon className="w-4 h-4 text-muted-foreground" />
-                          {formatDecimal(Number(BigInt(bond.theirStakeAmount)) / 1e9)}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        {new Date(Number(bond.createdAt) * 1000).toLocaleDateString()}
-                      </TableCell>
-                      <TableCell>
-                        <span
-                          className={`px-2 py-1 rounded-full text-xs ${
-                            bond.status === "active"
-                              ? "bg-green-100 text-green-800"
-                              : "bg-red-100 text-red-800"
-                          }`}
-                        >
-                          {bond.status}
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {bond.status === "active" ? (
-                          <div className="flex gap-2 justify-end">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="gap-1 text-green-600 border-green-200 hover:bg-green-50"
-                              // onClick={() => {
-                              //   setIsBondModalOpen(true);
-                              //   setBondAddress(bond.bondAddress);
-                              //   setBondModalType("stake");
-                              // }}
-                              disabled
-                            >
-                              <PlusIcon className="w-4 h-4" />
-                              Add
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="gap-1 text-blue-600 border-blue-200 hover:bg-blue-50"
-                              // onClick={() => {
-                              //   setIsBondModalOpen(true);
-                              //   setBondAddress(bond.bondAddress);
-                              //   setBondModalType("withdraw");
-                              // }}
-                              disabled
-                            >
-                              <MinusIcon className="w-4 h-4" />
-                              Withdraw
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="gap-1 text-red-600 border-red-200 hover:bg-red-50"
-                              // onClick={() => {
-                              //   setIsBondModalOpen(true);
-                              //   setBondAddress(bond.bondAddress);
-                              //   setBondModalType("break");
-                              // }}
-                              disabled
-                            >
-                              <UnlinkIcon className="w-4 h-4" />
-                              Break
-                            </Button>
+                  {userBonds && userBonds.length > 0 ? (
+                    userBonds.map((bond, index) => (
+                      <TableRow key={index} className="hover:bg-secondary/30">
+                        <TableCell className="font-medium flex items-center gap-2">
+                          <span className="bg-primary/10 p-1 rounded-full">
+                            <UserIcon className="w-4 h-4 text-primary" />
+                          </span>
+                          <UserResolver address={bond.counterPartyAddress} />
+                        </TableCell>
+                        <TableCell>
+                          <span
+                            className={`px-2 py-1 rounded-full text-xs ${
+                              bond.type === 'two-way' 
+                                ? 'bg-green-100 text-green-800' 
+                                : 'bg-yellow-100 text-yellow-800'
+                            }`}
+                          >
+                            {bond.type}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <WalletIcon className="w-4 h-4 text-muted-foreground" />
+                            {formatAmount(bond.yourStakeAmount)}
                           </div>
-                        ) : null}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <WalletIcon className="w-4 h-4 text-muted-foreground" />
+                            {formatAmount(bond.theirStakeAmount)}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          {new Date(Number(bond.createdAt)).toLocaleDateString()}
+                        </TableCell>
+                        <TableCell>
+                          <span
+                            className={`px-2 py-1 rounded-full text-xs ${
+                              bond.status === 'active' 
+                                ? 'bg-green-100 text-green-800' 
+                                : 'bg-red-100 text-red-800'
+                            }`}
+                          >
+                            {bond.status}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {bond.status === 'active' ? (
+                            <div className="flex gap-2 justify-end">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="gap-1 text-green-600 border-green-200 hover:bg-green-50"
+                                onClick={() => {
+                                  setIsBondModalOpen(true);
+                                  setSelectedBondId(bond.bondId);
+                                  setBondModalType('stake');
+                                }}
+                              >
+                                <PlusIcon className="w-4 h-4" />
+                                Add
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="gap-1 text-blue-600 border-blue-200 hover:bg-blue-50"
+                                onClick={() => {
+                                  setIsBondModalOpen(true);
+                                  setSelectedBondId(bond.bondId);
+                                  setBondModalType('withdraw');
+                                }}
+                              >
+                                <MinusIcon className="w-4 h-4" />
+                                Withdraw
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="gap-1 text-red-600 border-red-200 hover:bg-red-50"
+                                onClick={() => {
+                                  setIsBondModalOpen(true);
+                                  setSelectedBondId(bond.bondId);
+                                  setBondModalType('break');
+                                }}
+                              >
+                                <UnlinkIcon className="w-4 h-4" />
+                                Break
+                              </Button>
+                            </div>
+                          ) : null}
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                        No active bonds found. Create a new bond to get started.
                       </TableCell>
                     </TableRow>
-                  ))}
+                  )}
                 </TableBody>
               </Table>
             </CardContent>
@@ -363,30 +380,24 @@ export default function Dashboard() {
         </div>
       </main>
 
-      {/* Modals (commented out) */}
+      {/* Modals */}
       <AnimatePresence>
-        {/* {showOnboardModal && (
-          <OnBoardForm
+        {showOnboardModal && (
+          <OnboardForm
             key="onboard-modal"
-            isOpen={showOnboardModal}
-            onClose={() => setShowOnboardModal(false)}
+            onClose={() => refetchData()}
           />
-        )} */}
+        )}
 
-        {/* {showConnectModal && (
-          <AnimatedWalletConnect
-            key="wallet-connect-modal"
-            isOpen={showConnectModal}
-            onClose={() => setShowConnectModal(false)}
-          />
-        )} */}
-
-        {/* <BondModal
+        <BondModal
           isOpen={isBondModalOpen}
-          onClose={() => setIsBondModalOpen(false)}
+          onClose={() => {
+            setIsBondModalOpen(false);
+            refetchData();
+          }}
           type={bondModalType}
-          bondAddress={bondAddress}
-        /> */}
+          bondId={selectedBondId}
+        />
       </AnimatePresence>
     </div>
   );

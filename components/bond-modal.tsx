@@ -11,18 +11,16 @@ import { CreateBondForm } from './dashboard/create-bond-form'
 import { StakeBondForm } from './dashboard/stake-form'
 import { NULL_ADDRESS } from '@/lib/constants'
 import { BreakBondForm } from './dashboard/break-bond-form'
-import { WithdrawBondForm } from './dashboard/withdraw-form'
+import { WithdrawForm } from './dashboard/withdraw-form'
 
 export interface BondModalProps {
   isOpen: boolean
   onClose: () => void
   type: 'create' | 'withdraw' | 'break' | 'stake',
-  bondAddress?: string
-
-  
+  bondId?: string
 }
 
-export function BondModal({ isOpen, onClose, type, bondAddress }: BondModalProps) {
+export function BondModal({ isOpen, onClose, type, bondId }: BondModalProps) {
   const [isLoading, setIsLoading] = useState(false); // Loading state
 
   if (!isOpen) return null;
@@ -32,11 +30,11 @@ export function BondModal({ isOpen, onClose, type, bondAddress }: BondModalProps
       case 'create':
         return <CreateBondForm onClose={onClose} />;
       case 'withdraw':
-        return <WithdrawBondForm bondAddress={bondAddress ?? NULL_ADDRESS} onClose={onClose} />;
+        return <WithdrawForm bondId={bondId ?? NULL_ADDRESS} onClose={onClose} />;
       case 'break':
-        return <BreakBondForm bondAddress={bondAddress ?? NULL_ADDRESS} onClose={onClose} />;
+        return <BreakBondForm bondId={bondId ?? NULL_ADDRESS} onClose={onClose} />;
       case 'stake':
-        return <StakeBondForm bondAddress={bondAddress ?? NULL_ADDRESS} onClose={onClose} />;
+        return <StakeBondForm bondId={bondId ?? NULL_ADDRESS} onClose={onClose} />;
     }
   }
 

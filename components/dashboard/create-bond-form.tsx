@@ -24,7 +24,7 @@ import { USER_FACTORY_ABI } from "@/abi/user-factory";
 import { buildCreateBondTx } from "@/lib/calls";
 // import { isAddress } from "viem";
 import { useCreateBond } from "@/hooks/use-protocol";
-import { truncateEthAddress } from "@/lib/truncateAddress";
+import truncateEthAddress from "@/lib/truncateAddress";
 // import { getEnsAddress, getEnsName } from "viem/actions";
 // import { mainnet } from "viem/chains";
 // import { normalize } from 'viem/ens'
@@ -62,7 +62,7 @@ export const CreateBondForm = ({ onClose }: { onClose: () => void }) => {
         amount: parseFloat(amount) 
       });
       
-      toast.success(`Bond created with ${truncateAddress(counterpartyAddress)}`);
+      toast.success(`Bond created with ${truncateEthAddress(counterpartyAddress)}`);
       onClose();
     } catch (error: any) {
       console.error(error);

@@ -1,125 +1,84 @@
 "use client";
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Input } from "@/components/ui/input";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { BondLoadingModal } from "@/components/bond-loading-modal";
-import Image from "next/image";
-import { toast } from "sonner";
-import { showTransactionToast } from "../showTransactionToast";
-import { useAccount, useReadContract } from "wagmi";
-import { erc20Abi, formatUnits, parseUnits } from "viem";
-import {
-  CONTRACT_ADDRESSES,
-  NULL_ADDRESS,
-} from "@/lib/constants";
-import {
-  getEnsAddress,
-  waitForTransactionReceipt,
-  writeContract,
-} from "wagmi/actions";
-import { config } from "@/lib/wagmi-config";
-import { USER_FACTORY_ABI } from "@/abi/user-factory";
-import { createBond } from "@/lib/calls";
-import { isAddress } from "viem";
-import { USER_ABI } from "@/abi/user";
-import { useUserWalletFromRegistry } from "@/hooks/use-protocol";
+import { useWithdrawBond } from "@/hooks/use-protocol";
 
-export interface WithdrawBondFormProps {
-  onClose : () => void 
-  bondAddress: string
+export interface WithdrawFormProps {
+  onClose: () => void;
+  bondId: string;
 }
 
-
-export function WithdrawBondForm({bondAddress, onClose}:WithdrawBondFormProps ) {
-  const { address } = useAccount();
-
-  const [formData, setFormData] = useState<{
-    user2: string;
-    amount: string;
-  }>({
-    user2: bondAddress,
-    amount: "",
-  });
-
-  const {data:userWallet} = useUserWalletFromRegistry(address ?? NULL_ADDRESS)
-
-
- 
-
+export function WithdrawForm({ bondId, onClose }: WithdrawFormProps) {
   const [isLoading, setIsLoading] = useState(false);
+  
+  // Use the withdraw bond hook
+  const { mutateAsync: withdrawBond } = useWithdrawBond();
 
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
-  };
-
-  const handleSubmit = async (createUser: boolean) => {
-    setIsLoading(true);
-    try {
-      let finalAddress =  bondAddress;
-      if (!address) {
-        toast.error("No address found");
-        throw new Error("No address found");
-      }
-      if(!userWallet){
-        toast.error("No wallet found")
-        throw new Error("No wallet found")
-      }
-      
-     
-     
-      const hash = await writeContract(
-        config,{
-            abi:USER_ABI,
-            address:userWallet,
-            functionName:'withdraw',
-            args:[finalAddress as `0x${string}`]
-        }
-      ) 
-      await waitForTransactionReceipt(config, {
-        hash: hash,
-      });
-      showTransactionToast(hash)
-      onClose()
-    } catch (error) {
-      toast.error((error as Error).message);
-      console.error(error);
-    }
-    finally {
-      setIsLoading(false);
+  const handleSubmit = async () => {
+    if (!bondId) {
+      toast.error("Bond ID is missing");
+      return;
     }
     
+    setIsLoading(true);
+    
+    try {
+      // Pass bondId as object parameter
+      const txDigest = await withdrawBond({ bondId });
+      
+      toast.success("Successfully withdrawn from bond");
+      onClose();
+    } catch (error: any) {
+      console.error(error);
+      toast.error(error.message || "Failed to withdraw from bond");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
-    <div className="min-h-screen w-screen flex items-center justify-center bg-gradient-to-br from-[#cdffd8] to-blue-300">
+    <>
+      <AnimatePresence>{isLoading && <BondLoadingModal />}</AnimatePresence>
+      
       <motion.div
         initial={{ opacity: 0, scale: 0.9 }}
         animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: 0.5 }}
+        exit={{ opacity: 0, scale: 0.9 }}
+        transition={{ duration: 0.3 }}
         className="w-full max-w-md p-8 rounded-xl shadow-lg backdrop-blur-md bg-white bg-opacity-20 border border-white border-opacity-30"
-        style={{ backgroundColor: "rgba(148, 185, 255, 0.2)" }}
+        style={{ backgroundColor: "rgba(255, 255, 255, 0.9)" }}
       >
-        <h2 className="text-3xl font-bold mb-6 text-center text-blue-900">
-          Are you sure to withdraw ?
+        <h2 className="text-2xl font-bold mb-6 text-center text-blue-600">
+          Withdraw from Bond
         </h2>
-        <div className="space-y-6">
-          <div>
-           
-          </div>
-          
-          <div className="flex space-x-4">
+        
+        <p className="mb-6 text-gray-600 text-center">
+          Are you sure you want to withdraw your stake from this bond?
+        </p>
+        
+        <div className="flex space-x-4">
+          <motion.div className="flex-1" whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
             <Button
-              onClick={() => handleSubmit(true)}
-              className="flex-1 bg-red-600 hover:bg-red-700 text-white"
-            >            
-              Confirm
+              onClick={onClose}
+              className="w-full bg-gray-200 hover:bg-gray-300 text-gray-800"
+            >
+              Cancel
             </Button>
-          </div>
+          </motion.div>
+          
+          <motion.div className="flex-1" whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
+            <Button
+              onClick={handleSubmit}
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+            >            
+              Withdraw
+            </Button>
+          </motion.div>
         </div>
       </motion.div>
-      <AnimatePresence>{isLoading && <BondLoadingModal />}</AnimatePresence>
-    </div>
+    </>
   );
 }

@@ -3,7 +3,7 @@
 import { useCurrentAccount } from "@mysten/dapp-kit";
 import { useWallets, useConnectWallet } from "@mysten/dapp-kit";
 import { Button } from "@/components/ui/button";
-import { useState } from "react";as
+import { useState } from "react";
 
 export function ConnectButton() {
   const wallets = useWallets();

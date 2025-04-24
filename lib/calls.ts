@@ -1,8 +1,9 @@
 import { getFullnodeUrl, SuiClient } from '@mysten/sui/client';
 import { Transaction } from '@mysten/sui/transactions';
-import { PACKAGE_ID } from './constants';
+import { PACKAGE_ID, REGISTRY_ID, SUINS_REGISTRY } from '@/lib/constants';
 import { groupBy } from "./utils";
 import { useSignAndExecuteTransaction } from '@mysten/dapp-kit';
+import { MIST_PER_SUI } from '@mysten/sui/utils';
 
 // Define network options
 export type Network = 'mainnet' | 'testnet' | 'devnet' | 'localnet';
@@ -228,8 +229,11 @@ export function buildCreateProfileTx(name: string): Transaction {
     tx.moveCall({
         target: `${PACKAGE_ID}::trust::create_trust_profile`,
         arguments: [
+            tx.object(REGISTRY_ID),
             tx.pure.string(name),
-            clock,
+            tx.pure.bool(false),
+            tx.object(SUINS_REGISTRY),  // Always include SuiNS object
+            tx.object('0x6')
         ],
     });
     

@@ -7,116 +7,101 @@ import { BondLoadingModal } from "@/components/bond-loading-modal";
 import Image from "next/image";
 import { toast } from "sonner";
 import { showTransactionToast } from "../showTransactionToast";
-import { useAccount, useReadContract } from "wagmi";
-import { erc20Abi, formatUnits, parseUnits } from "viem";
 import {
   CONTRACT_ADDRESSES,
-  DEFAULT_ASSET_ADDRESS_ERC20,
   NULL_ADDRESS,
 } from "@/lib/constants";
-import {
-  getEnsAddress,
-  waitForTransactionReceipt,
-  writeContract,
-} from "wagmi/actions";
-import { config } from "@/lib/wagmi-config";
+
 import { USER_FACTORY_ABI } from "@/abi/user-factory";
-import { createBond } from "@/lib/calls";
-import { isAddress } from "viem";
-import { USER_ABI } from "@/abi/user";
-import { useUserWalletFromRegistry } from "@/hooks/use-protocol";
+import { useBreakBond } from "@/hooks/use-protocol";
+
 
 export interface BreakBondFormProps {
-  onClose : () => void 
-  bondAddress: string
+  onClose: () => void;
+  bondId: string;
 }
 
-
-export function BreakBondForm({bondAddress, onClose}:BreakBondFormProps ){
-  const { address } = useAccount();
+export function BreakBondForm({ bondId, onClose }: BreakBondFormProps) {
 
   const [formData, setFormData] = useState<{
     user2: string;
     amount: string;
   }>({
-    user2: bondAddress,
+    user2: bondId,
     amount: "",
   });
 
-  const {data:userWallet} = useUserWalletFromRegistry(address ?? NULL_ADDRESS)
-
-
- 
-
   const [isLoading, setIsLoading] = useState(false);
-
+  
+  // Use the break bond hook
+  const { mutateAsync: breakBond } = useBreakBond();
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  const handleSubmit = async (createUser: boolean) => {
-    setIsLoading(true);
-    try {
-      let finalAddress =  bondAddress;
-      if (!address) {
-        toast.error("No address found");
-        throw new Error("No address found");
-      }
-      if(!userWallet){
-        toast.error("No wallet found")
-        throw new Error("No wallet found")
-      }
-      
-     
-     
-      const hash = await writeContract(
-        config,{
-            abi:USER_ABI,
-            address:userWallet,
-            functionName:'breakBond',
-            args:[finalAddress as `0x${string}`]
-        }
-      ) 
-      await waitForTransactionReceipt(config, {
-        hash: hash,
-      });
-      showTransactionToast(hash)
-      onClose()
-    } catch (error) {
-      toast.error((error as Error).message);
-      console.error(error);
+  const handleSubmit = async () => {
+    if (!bondId) {
+      toast.error("Bond ID is missing");
+      return;
     }
-    finally{
+    
+    setIsLoading(true);
+    
+    try {
+      // Pass bondId as object parameter
+      const txDigest = await breakBond({ bondId });
+      
+      toast.success("Bond broken successfully");
+      onClose();
+    } catch (error: any) {
+      console.error(error);
+      toast.error(error.message || "Failed to break bond");
+    } finally {
       setIsLoading(false);
     }
-  
   };
 
   return (
     <div className="min-h-screen w-screen flex items-center justify-center bg-gradient-to-br from-[#cdffd8] to-blue-300">
+      <AnimatePresence>{isLoading && <BondLoadingModal />}</AnimatePresence>
+      
       <motion.div
         initial={{ opacity: 0, scale: 0.9 }}
         animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: 0.5 }}
+        exit={{ opacity: 0, scale: 0.9 }}
+        transition={{ duration: 0.3 }}
         className="w-full max-w-md p-8 rounded-xl shadow-lg backdrop-blur-md bg-white bg-opacity-20 border border-white border-opacity-30"
-        style={{ backgroundColor: "rgba(148, 185, 255, 0.2)" }}
+        style={{ backgroundColor: "rgba(255, 255, 255, 0.9)" }}
       >
-        <h2 className="text-3xl font-bold mb-6 text-center text-blue-900">
-          Are you sure to want break bond !
+        <h2 className="text-2xl font-bold mb-6 text-center text-red-600">
+          Break Bond
         </h2>
-        <div className="space-y-6">
-          <div className="flex space-x-4">
+        
+        <p className="mb-6 text-gray-600 text-center">
+          Are you sure you want to break this bond? This action cannot be undone.
+        </p>
+        
+        <div className="flex space-x-4">
+          <motion.div className="flex-1" whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
             <Button
-              onClick={() => handleSubmit(true)}
-              className="flex-1 bg-red-600 hover:bg-red-700 text-white"
+              onClick={onClose}
+              className="w-full bg-gray-200 hover:bg-gray-300 text-gray-800"
+            >
+              Cancel
+            </Button>
+          </motion.div>
+          
+          <motion.div className="flex-1" whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
+            <Button
+              onClick={handleSubmit}
+              className="w-full bg-red-600 hover:bg-red-700 text-white"
             >            
               Confirm
             </Button>
-          </div>
+          </motion.div>
         </div>
       </motion.div>
-      <AnimatePresence>{isLoading && <BondLoadingModal />}</AnimatePresence>
     </div>
   );
 }

@@ -72,3 +72,14 @@ export function groupBy<T>(array: T[], groupSize: number): T[][] {
   }
   return result;
 }
+
+export function formatAmount(amount: number | bigint | string): string {
+  // Convert input to a number
+  const numAmount = typeof amount === 'string' ? parseFloat(amount) : Number(amount);
+  
+  // Format with 2 decimal places and commas for thousands
+  return numAmount.toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  });
+}
