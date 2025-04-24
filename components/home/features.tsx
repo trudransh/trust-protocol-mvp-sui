@@ -50,7 +50,6 @@ const FeatureCard = ({ feature, index }: { feature: Feature; index: number }) =>
           }}
           transition={{ duration: 0.3 }}
         />
-
         <CardHeader>
           <CardTitle className="flex items-center z-10 relative">
             <motion.div
@@ -73,11 +72,11 @@ const FeatureCard = ({ feature, index }: { feature: Feature; index: number }) =>
 
 export default function Features() {
   const [windowSize, setWindowSize] = useState({ width: 0, height: 0 });
+  const [isMounted, setIsMounted] = useState(false);
 
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      setWindowSize({ width: window.innerWidth, height: window.innerHeight });
-    }
+    setIsMounted(true);
+    setWindowSize({ width: window.innerWidth, height: window.innerHeight });
   }, []);
 
   return (
@@ -98,7 +97,7 @@ export default function Features() {
       </div>
 
       {/* Floating blockchain symbols */}
-      {typeof window !== "undefined" &&
+      {isMounted &&
         [...Array(15)].map((_, i) => (
           <motion.div
             key={i}
