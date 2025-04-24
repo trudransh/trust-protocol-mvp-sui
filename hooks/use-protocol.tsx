@@ -12,11 +12,13 @@ import {
   extractCreatedObjects,
   User,
   UserBond,
-  getSuiClient
+  getSuiClient,
+  buildHasTrustProfileTx
 } from '@/lib/calls';
 import { Transaction } from '@mysten/sui/transactions';
 import { PACKAGE_ID } from '@/lib/constants';
 import { MIST_PER_SUI } from '@mysten/sui/utils';
+import {  } from '@mysten/sui/utils';
 
 // Define Registry ID
 export const REGISTRY_ID = process.env.NEXT_PUBLIC_REGISTRY_ID || "";
@@ -70,6 +72,14 @@ export const useUserData = (address?: string) => {
       return getUserTrustProfile(client, userAddress);
     },
     enabled: Boolean(userAddress),
+  });
+};
+
+export const useHasUserProfile = (userAddress: string) => {
+  const client = useSuiClient();
+  return useQuery<boolean>({
+    queryKey: ['hasUserProfile', userAddress],
+    queryFn: async () => buildHasTrustProfileTx(client, userAddress),
   });
 };
 

@@ -316,6 +316,7 @@ export function buildWithdrawBondTx(
     return tx;
 }
 
+
 // Break bond transaction
 export function buildBreakBondTx(
     bondId: string,
@@ -334,6 +335,21 @@ export function buildBreakBondTx(
     });
     
     return tx;
+}
+
+// Function to check if a user has a trust profile
+export function buildHasTrustProfileTx(userAddress: string): Transaction {
+  const tx = new Transaction();
+  
+  tx.moveCall({
+    target: `${PACKAGE_ID}::trust::has_trust_profile`,
+    arguments: [
+      tx.object(REGISTRY_ID),
+      tx.pure.address(userAddress)
+    ],
+  });
+  
+  return tx;
 }
 
 // HELPER FUNCTIONS
