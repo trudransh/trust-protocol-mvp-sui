@@ -1,87 +1,353 @@
-// 'use client'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useCurrentAccount, useSignAndExecuteTransaction, useSuiClient } from '@mysten/dapp-kit';
+import { SuiClient } from '@mysten/sui/client';
+import { 
+  getUserTrustProfile, 
+  getUserBonds, 
+  buildCreateProfileTx,
+  buildCreateBondTx,
+  buildJoinBondTx,
+  buildWithdrawBondTx,
+  buildBreakBondTx,
+  extractCreatedObjects,
+  User,
+  UserBond,
+  getSuiClient
+} from '@/lib/calls';
 
-// import { useCurrentAccount, useSuiClient, useSuiClientQuery } from '@mysten/dapp-kit'
-// import { useQuery, useMutation } from '@tanstack/react-query'
-// import { TransactionBlock } from '@mysten/sui.js/transactions'
-// import { PACKAGE_ID } from '@/lib/constants'
-// import { useSignAndExecuteTransactionBlock } from '@mysten/dapp-kit'
-
-// // This is a simplified version - actual implementation would depend on your specific Sui Move package
-
-// // Get user data from a Sui object
-// export function useUserData(userObjectId?: string) {
-//   return useSuiClientQuery(
-//     'getObject',
-//     {
-//       id: userObjectId || '',
-//       options: { showContent: true, showOwner: true }
-//     },
-//     {
-//       enabled: !!userObjectId,
-//     }
-//   )
-// }
-
-// // Create a bond between users (modify based on your actual Sui package structure)
-// export function useCreateBond() {
-//   const { mutate: signAndExecute } = useSignAndExecuteTransactionBlock()
+/**
+ * Hook to fetch user data from Sui network
+ */
+export const useUserData = (address?: string) => {
+  const client = useSuiClient();
+  const currentAccount = useCurrentAccount();
   
-//   return useMutation({
-//     mutationFn: async ({ 
-//       fromUser, 
-//       toUser, 
-//       amount 
-//     }: { 
-//       fromUser: string, 
-//       toUser: string, 
-//       amount: number 
-//     }) => {
-//       const txb = new TransactionBlock()
-      
-//       // Example - this won't work without your actual Move function names and parameters
-//       // You'll need to replace this with the actual call to your Move package
-//       txb.moveCall({
-//         target: `${PACKAGE_ID}::trust::create_bond`,
-//         arguments: [
-//           txb.pure(fromUser),
-//           txb.pure(toUser),
-//           txb.pure(amount)
-//         ]
-//       })
-      
-//       const response = await signAndExecute({
-//         transactionBlock: txb
-//       })
-      
-//       return response.digest
-//     }
-//   })
-// }
-
-// // Get bonds for a user
-// export function useUserBonds(userAddress?: string) {
-//   const suiClient = useSuiClient()
-//   const currentAccount = useCurrentAccount()
-//   const address = userAddress || currentAccount?.address
+  // Use provided address or current connected wallet
+  const userAddress = address || currentAccount?.address;
   
-//   return useQuery({
-//     queryKey: ['userBonds', address],
-//     queryFn: async () => {
-//       // This is placeholder code - you'll need to implement based on your protocol
-//       // It might use suiClient.getOwnedObjects with a filter for your bond type
-//       if (!address) return []
+  return useQuery<User | null>({
+    queryKey: ['userData', userAddress],
+    queryFn: async () => {
+      if (!userAddress) return null;
+      return getUserTrustProfile(client, userAddress);
+    },
+    enabled: Boolean(userAddress),
+  });
+};
+
+/**
+ * Hook to fetch user's bonds
+ */
+export const useUserBonds = (address?: string) => {
+  const client = useSuiClient();
+  const currentAccount = useCurrentAccount();
+  currentAccount.
+  
+  // Use provided address or current connected wallet
+  const userAddress = address || currentAccount?.address;
+  
+  return useQuery<UserBond[]>({
+    queryKey: ['userBonds', userAddress],
+    queryFn: async () => {
+      if (!userAddress) return [];
+      return getUserBonds(getSuiClient(), userAddress);
+    },
+    enabled: Boolean(userAddress),
+  });
+};
+
+/**
+ * Hook to create a user profile
+ */
+export const useCreateProfile = () => {
+  const { mutate: signAndExecuteTransaction } = useSignAndExecuteTransaction();
+  const queryClient = useQueryClient();
+  const currentAccount = useCurrentAccount();
+  
+  return useMutation<string, Error, { name: string }>({
+    mutationFn: async ({ name }) => {
+      if (!currentAccount?.address) {
+        throw new Error('Wallet not connected');
+      }
       
-//       // Example query - won't work without your actual type
-//       const { data } = await suiClient.getOwnedObjects({
-//         owner: address,
-//         filter: {
-//           StructType: `${PACKAGE_ID}::trust::Bond`
-//         },
-//         options: { showContent: true }
-//       })
+      const tx = buildCreateProfileTx(name);
+      const client = getSuiClient();
       
-//       return data || []
-//     },
-//     enabled: !!address
-//   })
-// }
+      
+        client.signAndExecuteTransaction({
+            signer: currentAccount,
+            transaction: tx,
+            options: {
+                showEffects: true,
+                showObjectChanges: true,
+            },
+        });
+
+  });
+};
+
+/**
+ * Hook to create a bond with another user
+ */
+export const useCreateBond = () => {
+  const { mutate: signAndExecute } = useSignAndExecuteTransaction();
+  const queryClient = useQueryClient();
+  const currentAccount = useCurrentAccount();
+  const { data: userData } = useUserData();
+  
+  return useMutation<
+    string,
+    Error,
+    { counterpartyAddress: string; amount: number }
+  >({
+    mutationFn: async ({ counterpartyAddress, amount }) => {
+      if (!currentAccount?.address) {
+        throw new Error('Wallet not connected');
+      }
+      
+      if (!userData?.profileId) {
+        throw new Error('You need to create a profile first');
+      }
+      
+      const tx = buildCreateBondTx(userData.profileId, counterpartyAddress, amount);
+      
+      return new Promise((resolve, reject) => {
+        signAndExecute(
+          { transactionBlock: tx },
+          {
+            onSuccess: (result) => {
+              // Extract bond ID if possible
+              if (result.effects) {
+                const createdObjects = extractCreatedObjects(result.effects);
+                if (createdObjects.length > 0) {
+                  resolve(createdObjects[0]); // Return the bond ID
+                  return;
+                }
+              }
+              resolve(result.digest);
+            },
+            onError: (error) => {
+              reject(error);
+            },
+          }
+        );
+      });
+    },
+    onSuccess: () => {
+      // Invalidate queries
+      if (currentAccount?.address) {
+        queryClient.invalidateQueries({ queryKey: ['userData', currentAccount.address] });
+        queryClient.invalidateQueries({ queryKey: ['userBonds', currentAccount.address] });
+      }
+    },
+  });
+};
+
+/**
+ * Hook to join an existing bond
+ */
+export const useJoinBond = () => {
+  const { mutate: signAndExecute } = useSignAndExecuteTransaction();
+  const queryClient = useQueryClient();
+  const currentAccount = useCurrentAccount();
+  const { data: userData } = useUserData();
+  
+  return useMutation<
+    string,
+    Error,
+    { bondId: string; amount: number }
+  >({
+    mutationFn: async ({ bondId, amount }) => {
+      if (!currentAccount?.address) {
+        throw new Error('Wallet not connected');
+      }
+      
+      if (!userData?.profileId) {
+        throw new Error('You need to create a profile first');
+      }
+      
+      const tx = buildJoinBondTx(bondId, userData.profileId, amount);
+      
+      return new Promise((resolve, reject) => {
+        signAndExecute(
+          { transactionBlock: tx },
+          {
+            onSuccess: (result) => {
+              resolve(result.digest);
+            },
+            onError: (error) => {
+              reject(error);
+            },
+          }
+        );
+      });
+    },
+    onSuccess: () => {
+      // Invalidate queries
+      if (currentAccount?.address) {
+        queryClient.invalidateQueries({ queryKey: ['userData', currentAccount.address] });
+        queryClient.invalidateQueries({ queryKey: ['userBonds', currentAccount.address] });
+      }
+    },
+  });
+};
+
+/**
+ * Hook to withdraw from a bond
+ */
+export const useWithdrawBond = () => {
+  const { mutate: useSignAndExecuteTransaction } = useSignAndExecuteTransaction();
+  const queryClient = useQueryClient();
+  const currentAccount = useCurrentAccount();
+  const { data: userData } = useUserData();
+  
+  return useMutation<
+    string,
+    Error,
+    { bondId: string }
+  >({
+    mutationFn: async ({ bondId }) => {
+      if (!currentAccount?.address) {
+        throw new Error('Wallet not connected');
+      }
+      
+      if (!userData?.profileId) {
+        throw new Error('Profile not found');
+      }
+      
+      const tx = buildWithdrawBondTx(bondId, userData.profileId);
+      
+      return new Promise((resolve, reject) => {
+        signAndExecute(
+          { transactionBlock: tx },
+          {
+            onSuccess: (result) => {
+              resolve(result.digest);
+            },
+            onError: (error) => {
+              reject(error);
+            },
+          }
+        );
+      });
+    },
+    onSuccess: () => {
+      // Invalidate queries
+      if (currentAccount?.address) {
+        queryClient.invalidateQueries({ queryKey: ['userData', currentAccount.address] });
+        queryClient.invalidateQueries({ queryKey: ['userBonds', currentAccount.address] });
+      }
+    },
+  });
+};
+
+/**
+ * Hook to break a bond
+ */
+export const useBreakBond = () => {
+  const { mutate: signAndExecute } = useSignAndExecuteTransaction();
+  const queryClient = useQueryClient();
+  const currentAccount = useCurrentAccount();
+  const { data: userData } = useUserData();
+  
+  return useMutation<
+    string,
+    Error,
+    { bondId: string }
+  >({
+    mutationFn: async ({ bondId }) => {
+      if (!currentAccount?.address) {
+        throw new Error('Wallet not connected');
+      }
+      
+      if (!userData?.profileId) {
+        throw new Error('Profile not found');
+      }
+      
+      const tx = buildBreakBondTx(bondId, userData.profileId);
+      
+      return new Promise((resolve, reject) => {
+        signAndExecute(
+          { transactionBlock: tx },
+          {
+            onSuccess: (result) => {
+              resolve(result.digest);
+            },
+            onError: (error) => {
+              reject(error);
+            },
+          }
+        );
+      });
+    },
+    onSuccess: () => {
+      // Invalidate queries
+      if (currentAccount?.address) {
+        queryClient.invalidateQueries({ queryKey: ['userData', currentAccount.address] });
+        queryClient.invalidateQueries({ queryKey: ['userBonds', currentAccount.address] });
+      }
+    },
+  });
+};
+
+/**
+ * Hook to check if a user already has a profile
+ */
+export const useHasProfile = (address?: string) => {
+  const { data: userData, isLoading } = useUserData(address);
+  
+  return {
+    hasProfile: Boolean(userData?.profileId),
+    profileId: userData?.profileId,
+    isLoading
+  };
+};
+
+/**
+ * Hook to get bond details by ID
+ */
+export const useBond = (bondId?: string) => {
+  const client = useSuiClient();
+  
+  return useQuery<UserBond | null>({
+    queryKey: ['bond', bondId],
+    queryFn: async () => {
+      if (!bondId) return null;
+      try {
+        const response = await client.getObject({
+          id: bondId,
+          options: { showContent: true },
+        });
+        
+        // Format bond data
+        if (response.data?.content?.dataType === 'moveObject') {
+          const fields = response.data.content.fields as any;
+          const user1 = fields.user_1;
+          const user2 = fields.user_2;
+          const moneyByUser1 = Number(fields.money_by_user_1?.value || 0) / 1_000_000_000;
+          const moneyByUser2 = Number(fields.money_by_user_2?.value || 0) / 1_000_000_000;
+          const bondType = Number(fields.bond_type);
+          const bondStatus = Number(fields.bond_status);
+          
+          return {
+            bondId,
+            user1,
+            user2,
+            yourStakeAmount: moneyByUser1, // Default perspective
+            theirStakeAmount: moneyByUser2,
+            totalAmount: moneyByUser1 + moneyByUser2,
+            createdAt: Number(fields.created_at),
+            status: bondStatus === 0 ? "active" : bondStatus === 1 ? "withdrawn" : "broken",
+            counterPartyAddress: user2, // Default perspective
+            type: bondType === 0 ? "one-way" : "two-way"
+          };
+        }
+        return null;
+      } catch (error) {
+        console.error(`Error fetching bond ${bondId}:`, error);
+        return null;
+      }
+    },
+    enabled: Boolean(bondId),
+  });
+};
