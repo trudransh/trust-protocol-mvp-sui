@@ -4,11 +4,7 @@ import "./globals.css";
 import Header from "@/components/layout/header";
 import { Providers } from "@/components/providers";
 import { Toaster } from "sonner";
-import '@mysten/dapp-kit/dist/index.css'
-
-
-import {WalletProvider} from '@suiet/wallet-kit';
-import '@suiet/wallet-kit/style.css';
+import '@mysten/dapp-kit/dist/index.css';
 
 const geistSans = Geist({
   variable: "--font-geist-sans",

@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useCurrentAccount } from "@mysten/dapp-kit";
 import { AnimatePresence, motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
+
 import {
   Table,
   TableHeader,
@@ -37,7 +38,7 @@ import { BondModal } from "@/components/bond-modal";
 import { AnimatedWalletConnect } from "@/components/animated-connect-button";
 import { BondLoadingModal } from "@/components/bond-loading-modal";
 
-import { useHasProfile, useUserProfile, useUserBonds } from "@/hooks/use-protocol";
+import { useHasProfile, useUserProfile, useUserBonds,} from "@/hooks/use-protocol";
 // import { NULL_ADDRESS } from "@/lib/constants";
 import { formatAmount } from "@/lib/utils";
 import truncateAddress from "@/lib/truncateAddress";
