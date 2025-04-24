@@ -12,6 +12,7 @@ import { motion, useScroll, useTransform } from "framer-motion";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import TestComponent from '@/components/test';
 
 export default function Home() {
   const [isHovered, setIsHovered] = useState(false);
@@ -29,6 +30,7 @@ export default function Home() {
             <span className="text-sm text-muted-foreground">Scroll to explore</span>
             <div className="w-6 h-6 border-2 border-primary rounded-full animate-spin" />
           </div>
+          <TestComponent />
         </motion.div>
 
         <Header />
@@ -77,6 +79,7 @@ export default function Home() {
               </p>
             </motion.div>
 
+
             <motion.div
               initial={{ scale: 0.8 }}
               animate={{ scale: 1 }}
@@ -99,6 +102,7 @@ export default function Home() {
                     isHovered ? "rotate-45" : ""
                   )} />
                   <span>Launch App</span>
+                  
                   <ArrowRight className={cn(
                     "w-5 h-5 transition-all",
                     isHovered ? "translate-x-1" : ""

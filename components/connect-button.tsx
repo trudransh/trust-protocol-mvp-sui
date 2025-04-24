@@ -1,6 +1,6 @@
 "use client";
 
-import { useWallet } from "@suiet/wallet-kit";
+import { useCurrentAccount } from "@mysten/dapp-kit";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
 
