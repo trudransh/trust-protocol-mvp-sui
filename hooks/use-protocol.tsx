@@ -373,18 +373,7 @@ export const useBreakBond = () => {
 /**
  * Hook to get bond details by ID
  */
-export function useBond(bondId?: string) {
-  const suiClient = useSuiClient();
-  
-  return useQuery<UserBond | null>({
-    queryKey: ['bond', bondId],
-    queryFn: async () => {
-      if (!bondId) return null;
-      return getBondById(suiClient, bondId);
-    },
-    enabled: !!bondId
-  });
-}
+
 
 // Fix UserProfile hook to properly accept options
 export function useUserProfile(options?: { enabled?: boolean }) {
