@@ -66,25 +66,25 @@ export default function Header() {
         {/* Desktop Navigation */}
         <nav className="hidden md:flex items-center space-x-4 font-semibold">
           <Link
-            href="https://www.overleaf.com/read/zyhmdxynwxgt#a050e6"
+            href=""
             className="text-primary-foreground hover:underline"
           >
             Whitepaper
           </Link>
           <Link
-            href="https://t.me/+e2_TcJOoNO80MzA9"
+            href=""
             className="text-primary-foreground hover:underline"
           >
             Telegram
           </Link>
           <Link
-            href="https://x.com/_trustprotocol"
+            href=""
             className="text-primary-foreground hover:underline"
           >
             Twitter
           </Link>
           <Link
-            href="https://github.com/the-trustprotocol"
+            href="https://github.com/trudransh/trust-protocol-mvp-sui"
             className="text-primary-foreground hover:underline"
           >
             Github

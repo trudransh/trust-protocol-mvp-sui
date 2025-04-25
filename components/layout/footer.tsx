@@ -47,7 +47,7 @@ export default function Footer() {
             <h4 className="text-lg font-semibold text-primary-800">Community</h4>
             <div className="flex space-x-4">
               <motion.a 
-                href="https://github.com/trust-protocol" 
+                href="https://github.com/trudransh/trust-protocol-mvp-sui" 
                 target="_blank"
                 whileHover={{ scale: 1.1 }}
                 className="p-2 bg-white/20 rounded-full hover:bg-primary-100 transition-all border border-primary-200"
@@ -55,7 +55,7 @@ export default function Footer() {
                 <Github className="w-5 h-5 text-primary-800" />
               </motion.a>
               <motion.a 
-                href="https://twitter.com/trust_protocol" 
+                href="" 
                 target="_blank"
                 whileHover={{ scale: 1.1 }}
                 className="p-2 bg-white/20 rounded-full hover:bg-primary-100 transition-all border border-primary-200"
