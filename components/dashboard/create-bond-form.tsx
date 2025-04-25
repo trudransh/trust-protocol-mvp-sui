@@ -4,31 +4,15 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { BondLoadingModal } from "@/components/bond-loading-modal";
-import Image from "next/image";
 import { toast } from "sonner";
 import { showTransactionToast } from "../showTransactionToast";
-// import { useAccount, useReadContract } from "wagmi";
-// import { createPublicClient, erc20Abi, formatUnits, http, parseUnits } from "viem";
 import {
   CONTRACT_ADDRESSES,
   NULL_ADDRESS,
   ValidChainType,
 } from "@/lib/constants";
-// import {
-
-  // waitForTransactionReceipt,
-  // writeContract,
-// } from "wagmi/actions";
-// import { config } from "@/lib/wagmi-config";
-import { USER_FACTORY_ABI } from "@/abi/user-factory";
-import { buildCreateBondTx } from "@/lib/calls";
-// import { isAddress } from "viem";
 import { useCreateBond } from "@/hooks/use-protocol";
 import truncateEthAddress from "@/lib/truncateAddress";
-// import { getEnsAddress, getEnsName } from "viem/actions";
-// import { mainnet } from "viem/chains";
-// import { normalize } from 'viem/ens'
-// import { useChainId } from 'wagmi';
 import { X } from "lucide-react";
 
 
@@ -61,6 +45,7 @@ export const CreateBondForm = ({ onClose }: { onClose: () => void }) => {
         counterpartyAddress, 
         amount: parseFloat(amount) 
       });
+      console.log("txDigest bild and ready to console", txDigest);
       
       toast.success(`Bond created with ${truncateEthAddress(counterpartyAddress)}`);
       onClose();

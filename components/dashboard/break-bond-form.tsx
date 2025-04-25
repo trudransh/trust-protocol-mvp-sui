@@ -12,7 +12,6 @@ import {
   NULL_ADDRESS,
 } from "@/lib/constants";
 
-import { USER_FACTORY_ABI } from "@/abi/user-factory";
 import { useBreakBond } from "@/hooks/use-protocol";
 
 

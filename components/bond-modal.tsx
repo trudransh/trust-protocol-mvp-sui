@@ -40,9 +40,13 @@ export function BondModal({ isOpen, onClose, type, bondId }: BondModalProps) {
 
   return (
     <div className="fixed inset-0 z-50">
-      {/* Just blur the background, no gradient */}
-      <div className="absolute inset-0 bg-black/20 backdrop-blur-sm" onClick={onClose} />
-      <div className="flex items-center justify-center min-h-screen">
+      {/* Add pointer-events-none to prevent click interference with form elements */}
+      <div className="absolute inset-0 bg-black/20 backdrop-blur-sm pointer-events-none" />
+      
+      {/* Add a separate div for click handling that sits behind the form */}
+      <div className="absolute inset-0" onClick={onClose}></div>
+      
+      <div className="flex items-center justify-center min-h-screen relative z-10">
         {handleModal(type)}
       </div>
     </div>
