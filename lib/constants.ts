@@ -45,9 +45,10 @@ export type ValidChainType = keyof typeof CONTRACT_ADDRESSES;
 // ) as keyof typeof CONTRACT_ADDRESSES;
 
 // Sui Package ID - Replace with your actual deployed package ID
-export const PACKAGE_ID = "0xcc601cbb789841aea03b0a11b74f058600912797f5e7ea5394ae117d0fdfea2e"
-export const REGISTRY_ID = "0x67f12b8fb45ffd40d779addcafabcebb6030bbc75216d69039ce527b08ea5c85"
-export const SUINS_REGISTRY = "0x300369e8909b9a6464da265b9a5a9ab6fe2158a040e84e808628cde7a07ee5a3" // Your deployed package ID here
+export const PACKAGE_ID = "0x7f66fab42b3de6f62daaef7e2390babaec35d7766cceb74c9b438b9e21462d50"
+export const REGISTRY_ID = "0xc4bed024c6ab43fcaaaf96bfb3803b0ec15745a9b41d022d3cf6f577591d36e9"
+export const SUINS_REGISTRY = "0x300369e8909b9a6464da265b9a5a9ab6fe2158a040e84e808628cde7a07ee5a3" 
+export const BOND_OBJECT_ID = "0xde9c41f79d1b097bdaf93c1e20eb3fe1c3209a1d2a790b0f7dd86b4c4719f853"
 
 // Sui Network Constants
 export const SUI_NETWORKS = {

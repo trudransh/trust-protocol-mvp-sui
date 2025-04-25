@@ -17,12 +17,12 @@ import {
   suiClient
 } from '@/lib/calls';
 import { Transaction } from '@mysten/sui/transactions';
-import { PACKAGE_ID } from '@/lib/constants';
+import { PACKAGE_ID, REGISTRY_ID, BOND_OBJECT_ID } from '@/lib/constants';
 import { MIST_PER_SUI } from '@mysten/sui/utils';
 import {  } from '@mysten/sui/utils';
 
 // Define Registry ID
-export const REGISTRY_ID = process.env.NEXT_PUBLIC_REGISTRY_ID || "0x67f12b8fb45ffd40d779addcafabcebb6030bbc75216d69039ce527b08ea5c85";
+
 const CLOCK_OBJECT_ID = '0x6'; // Standard clock object ID
 
 // Format balance from MIST to SUI
@@ -588,6 +588,8 @@ export function useProfileRegistry() {
     },
   });
 }
+
+
 
 // Get profile ID for the current user
 export function useProfileId() {

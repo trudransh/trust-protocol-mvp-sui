@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useCurrentAccount } from "@mysten/dapp-kit";
-import { AnimatePresence } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -23,6 +23,10 @@ import {
   WalletIcon,
   LinkIcon,
   UnlinkIcon,
+  CircleIcon,
+  ChevronDownIcon,
+  CircleCheckIcon,
+  XCircleIcon,
 } from "lucide-react";
 
 // Utility functions
@@ -35,6 +39,11 @@ import { BondLoadingModal } from "@/components/bond-loading-modal";
 // Hooks
 import { useUserProfile, useUserBonds } from "@/hooks/use-protocol";
 
+// Format amounts with SUI token
+const formatSui = (amount: number) => {
+  return `${formatAmount(amount)} SUI`;
+};
+
 // Sui-specific address truncation
 function truncateSuiAddress(address: string | undefined) {
   if (!address) return "";
@@ -46,8 +55,39 @@ function UserResolver({ address }: { address: string | undefined }) {
   return <span>{truncateSuiAddress(address)}</span>;
 }
 
-
-
+// Bond status badge component
+function BondStatusBadge({ status }: { status: string }) {
+  let bgColor, textColor, icon;
+  
+  switch (status) {
+    case 'active':
+      bgColor = 'bg-green-100';
+      textColor = 'text-green-800';
+      icon = <CircleCheckIcon className="w-3 h-3 mr-1" />;
+      break;
+    case 'withdrawn':
+      bgColor = 'bg-blue-100';
+      textColor = 'text-blue-800';
+      icon = <MinusIcon className="w-3 h-3 mr-1" />;
+      break;
+    case 'broken':
+      bgColor = 'bg-red-100';
+      textColor = 'text-red-800';
+      icon = <XCircleIcon className="w-3 h-3 mr-1" />;
+      break;
+    default:
+      bgColor = 'bg-gray-100';
+      textColor = 'text-gray-800';
+      icon = <CircleIcon className="w-3 h-3 mr-1" />;
+  }
+  
+  return (
+    <span className={`px-2 py-1 rounded-full text-xs ${bgColor} ${textColor} flex items-center inline-flex`}>
+      {icon}
+      {status.charAt(0).toUpperCase() + status.slice(1)}
+    </span>
+  );
+}
 
 export default function Dashboard() {
   console.log("Dashboard component mounting...");
@@ -62,18 +102,44 @@ export default function Dashboard() {
     refetch: refetchUserProfile 
   } = useUserProfile();
 
-  const userProfile = userProfileResult?.data;
+  // Access the profile data from the result
+  const profileExists = userProfileResult?.exists || false;
+  const userProfile = userProfileResult?.data || null;
 
+  // Log profile data for debugging
+  useEffect(() => {
+    if (userProfileResult) {
+      console.log("User profile result:", userProfileResult);
+      if (userProfile) {
+        console.log("Profile data successfully loaded:", userProfile);
+      }
+    }
+  }, [userProfileResult, userProfile]);
+
+  // Fetch bonds only when a profile exists
   const { 
     data: userBonds, 
     isLoading: bondsLoading, 
     refetch: refetchUserBonds 
   } = useUserBonds({
-    enabled: userProfileResult?.exists === true
+    enabled: profileExists === true
   });
 
-  console.log("useUserProfile result:", { userProfileResult, profileLoading, profileError });
-  console.log("useUserBonds result:", { userBonds, bondsLoading });
+
+  console.log("userBonds", userBonds);
+
+  // Bond filtering and sorting
+  const [bondStatusFilter, setBondStatusFilter] = useState<string | null>(null);
+  
+  // Filtered bonds based on status
+  const filteredBonds = bondStatusFilter 
+    ? userBonds?.filter(bond => bond.status === bondStatusFilter) 
+    : userBonds;
+  
+  // Count bonds by status
+  const activeBondsCount = userBonds?.filter(bond => bond.status === 'active').length || 0;
+  const brokenBondsCount = userBonds?.filter(bond => bond.status === 'broken').length || 0;
+  const withdrawnBondsCount = userBonds?.filter(bond => bond.status === 'withdrawn').length || 0;
 
   // Bond modal states
   const [selectedBondId, setSelectedBondId] = useState<string | undefined>(undefined);
@@ -84,7 +150,7 @@ export default function Dashboard() {
   const handleOnboardingComplete = async () => {
     console.log("Onboarding completed, refreshing dashboard...");
     await refetchUserProfile();
-    if (userProfileResult?.exists === true) {
+    if (profileExists === true) {
       await refetchUserBonds();
     }
   };
@@ -96,19 +162,19 @@ export default function Dashboard() {
   const totalAmount = totalValueLocked + totalWithdrawnAmount + totalBrokenAmount;
 
   // Loading state
-  if (profileLoading || (userProfileResult?.exists === true && bondsLoading)) {
+  if (profileLoading || (profileExists === true && bondsLoading)) {
     console.log("Showing loading modal");
     return <BondLoadingModal />;
   }
 
   // Error or no profile
-  if (profileError || userProfileResult?.exists === false) {
+  if (profileError || profileExists === false) {
     console.log("Showing onboarding modal due to error or no profile");
     return <OnboardForm onClose={handleOnboardingComplete} />;
   }
 
-  // Dashboard content
-  if (userProfileResult?.exists === true && userProfile) {
+  // Dashboard content - only render when we have profile data
+  if (profileExists === true && userProfile) {
     console.log("Rendering dashboard with profile data");
     return (
       <div className="min-h-screen bg-gradient-to-r from-[#cdffd8] to-[#94b9ff]">
@@ -116,10 +182,10 @@ export default function Dashboard() {
           {/* Header */}
           <div className="flex flex-col gap-2">
             <h1 className="text-4xl font-bold bg-clip-text text-primary">
-              Trust Dashboard
+              {userProfile.name}'s Sui Trust Dashboard
             </h1>
             <p className="text-lg text-muted-foreground">
-              Track and manage your on-chain trust relationships
+              Track and manage your on-chain trust relationships on Sui
             </p>
           </div>
 
@@ -138,16 +204,16 @@ export default function Dashboard() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">
-                  ${formatAmount(totalValueLocked)}
+                  {formatSui(totalValueLocked)}
                 </div>
                 <div className="text-sm text-muted-foreground mt-1">
-                  Total Withdrawn Amount: ${formatAmount(totalWithdrawnAmount)}
+                  Total Withdrawn: {formatSui(totalWithdrawnAmount)}
                 </div>
                 <div className="text-sm text-muted-foreground mt-1">
-                  Total Broken Amount: ${formatAmount(totalBrokenAmount)}
+                  Total Broken: {formatSui(totalBrokenAmount)}
                 </div>
                 <div className="text-sm text-muted-foreground mt-1">
-                  Total Amount Lifetime: ${formatAmount(totalAmount)}
+                  Total Lifetime Value: {formatSui(totalAmount)}
                 </div>
               </CardContent>
             </Card>
@@ -159,22 +225,25 @@ export default function Dashboard() {
                     <HandshakeIcon className="w-5 h-5 text-primary" />
                   </div>
                   <CardTitle className="text-sm font-medium text-muted-foreground">
-                    Active Bonds
+                    Bond Statistics
                   </CardTitle>
                 </div>
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">
-                  {userProfile?.activeBonds || 0}
+                  {userProfile.activeBonds || 0} Active
                 </div>
                 <div className="text-sm text-muted-foreground mt-1">
-                  Broken Bonds: {userProfile?.brokenBonds || 0}
+                  <span className="inline-block w-3 h-3 rounded-full bg-red-500 mr-2"></span>
+                  Broken Bonds: {userProfile.brokenBonds || 0}
                 </div>
                 <div className="text-sm text-muted-foreground mt-1">
-                  Withdrawn Bonds: {userProfile?.withdrawnBonds || 0}
+                  <span className="inline-block w-3 h-3 rounded-full bg-blue-500 mr-2"></span>
+                  Withdrawn Bonds: {userProfile.withdrawnBonds || 0}
                 </div>
                 <div className="text-sm text-muted-foreground mt-1">
-                  Total Bonds: {userProfile?.totalBonds || 0}
+                  <span className="inline-block w-3 h-3 rounded-full bg-green-500 mr-2"></span>
+                  Total Bonds: {userProfile.totalBonds || 0}
                 </div>
               </CardContent>
             </Card>
@@ -192,10 +261,16 @@ export default function Dashboard() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">
-                  {userProfile?.trustScore || 100}
+                  {userProfile.trustScore || 100}
                 </div>
                 <div className="text-sm text-muted-foreground mt-1">
-                  Based on your bond activity
+                  Based on your Sui chain bond activity
+                </div>
+                <div className="text-xs text-muted-foreground mt-1">
+                  Profile created: {new Date(Number(userProfile.createdAt) * 1000).toLocaleDateString()}
+                </div>
+                <div className="text-xs text-muted-foreground mt-1">
+                  Last updated: {new Date(Number(userProfile.updatedAt) * 1000).toLocaleDateString()}
                 </div>
               </CardContent>
             </Card>
@@ -208,7 +283,7 @@ export default function Dashboard() {
                 Bond Management
               </h3>
               <p className="text-sm text-gray-600">
-                Click Create Bond And Start Your Trust Relationships
+                Create and manage trust bonds using SUI tokens
               </p>
             </div>
             <Button
@@ -225,11 +300,48 @@ export default function Dashboard() {
             </Button>
           </div>
 
-          {/* Active Bonds Table */}
+          {/* Bonds Table with Filter */}
           <div className="mt-8 flex-1 overflow-hidden min-h-[400px]">
             <Card className="h-full bg-white/80 flex flex-col">
               <CardHeader className="border-b">
-                <h2 className="text-xl font-semibold">Active Bonds</h2>
+                <div className="flex justify-between items-center">
+                  <h2 className="text-xl font-semibold">
+                    All Bonds ({userBonds?.length || 0})
+                  </h2>
+                  <div className="flex gap-2">
+                    <Button 
+                      variant={bondStatusFilter === null ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setBondStatusFilter(null)}
+                    >
+                      All ({userBonds?.length || 0})
+                    </Button>
+                    <Button 
+                      variant={bondStatusFilter === 'active' ? "default" : "outline"}
+                      size="sm"
+                      className="bg-green-100 text-green-800 hover:bg-green-200 border-green-200"
+                      onClick={() => setBondStatusFilter('active')}
+                    >
+                      Active ({activeBondsCount})
+                    </Button>
+                    <Button 
+                      variant={bondStatusFilter === 'withdrawn' ? "default" : "outline"}
+                      size="sm"
+                      className="bg-blue-100 text-blue-800 hover:bg-blue-200 border-blue-200"
+                      onClick={() => setBondStatusFilter('withdrawn')}
+                    >
+                      Withdrawn ({withdrawnBondsCount})
+                    </Button>
+                    <Button 
+                      variant={bondStatusFilter === 'broken' ? "default" : "outline"}
+                      size="sm"
+                      className="bg-red-100 text-red-800 hover:bg-red-200 border-red-200"
+                      onClick={() => setBondStatusFilter('broken')}
+                    >
+                      Broken ({brokenBondsCount})
+                    </Button>
+                  </div>
+                </div>
               </CardHeader>
               <CardContent className="p-0 flex-1 overflow-auto">
                 <Table>
@@ -239,14 +351,14 @@ export default function Dashboard() {
                       <TableHead>Type</TableHead>
                       <TableHead>Your Stake</TableHead>
                       <TableHead>Their Stake</TableHead>
-                      <TableHead>Initiated</TableHead>
+                      <TableHead>Created</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {userBonds && userBonds.length > 0 ? (
-                      userBonds.map((bond, index) => (
+                    {filteredBonds && filteredBonds.length > 0 ? (
+                      filteredBonds.map((bond, index) => (
                         <TableRow key={index} className="hover:bg-secondary/30">
                           <TableCell className="font-medium flex items-center gap-2">
                             <span className="bg-primary/10 p-1 rounded-full">
@@ -268,28 +380,20 @@ export default function Dashboard() {
                           <TableCell>
                             <div className="flex items-center gap-2">
                               <WalletIcon className="w-4 h-4 text-muted-foreground" />
-                              {formatAmount(bond.yourStakeAmount)}
+                              {formatSui(bond.yourStakeAmount)}
                             </div>
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center gap-2">
                               <WalletIcon className="w-4 h-4 text-muted-foreground" />
-                              {formatAmount(bond.theirStakeAmount)}
+                              {formatSui(bond.theirStakeAmount)}
                             </div>
                           </TableCell>
                           <TableCell>
                             {new Date(Number(bond.createdAt) * 1000).toLocaleDateString()}
                           </TableCell>
                           <TableCell>
-                            <span
-                              className={`px-2 py-1 rounded-full text-xs ${
-                                bond.status === 'active' 
-                                  ? 'bg-green-100 text-green-800' 
-                                  : 'bg-red-100 text-red-800'
-                              }`}
-                            >
-                              {bond.status}
-                            </span>
+                            <BondStatusBadge status={bond.status} />
                           </TableCell>
                           <TableCell className="text-right">
                             {bond.status === 'active' ? (
@@ -344,7 +448,9 @@ export default function Dashboard() {
                     ) : (
                       <TableRow>
                         <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                          No active bonds found. Create a new bond to get started.
+                          {bondStatusFilter 
+                            ? `No ${bondStatusFilter} bonds found.` 
+                            : "No bonds found. Create a new bond to get started."}
                         </TableCell>
                       </TableRow>
                     )}
@@ -364,7 +470,7 @@ export default function Dashboard() {
               setIsBondModalOpen(false);
               setTimeout(() => {
                 refetchUserProfile();
-                if (userProfileResult?.exists === true) {
+                if (profileExists === true) {
                   refetchUserBonds();
                 }
               }, 100);
