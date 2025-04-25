@@ -1,6 +1,6 @@
 import { getFullnodeUrl, SuiClient } from '@mysten/sui/client';
 import { Transaction } from '@mysten/sui/transactions';
-import { PACKAGE_ID, REGISTRY_ID, SUINS_REGISTRY } from '@/lib/constants';
+import { BOND_OBJECT_ID, PACKAGE_ID, REGISTRY_ID, SUINS_REGISTRY } from '@/lib/constants';
 import { groupBy } from "./utils";
 import { useSignAndExecuteTransaction } from '@mysten/dapp-kit';
 import { MIST_PER_SUI } from '@mysten/sui/utils';
@@ -258,6 +258,7 @@ export function buildCreateBondTx(
     tx.moveCall({
         target: `${PACKAGE_ID}::trust::create_bond`,
         arguments: [
+            tx.object(BOND_OBJECT_ID),
             tx.object(profileId),
             tx.pure.address(counterpartyAddress),
             coin,
