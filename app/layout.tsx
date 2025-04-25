@@ -7,8 +7,7 @@ import { Toaster } from "sonner";
 import '@mysten/dapp-kit/dist/index.css'
 
 
-import {WalletProvider} from '@suiet/wallet-kit';
-import '@suiet/wallet-kit/style.css';
+
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
