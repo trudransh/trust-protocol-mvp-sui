@@ -13,7 +13,8 @@ import {
   User,
   UserBond,
   getSuiClient,
-  buildHasTrustProfileTx
+  buildHasTrustProfileTx,
+  suiClient
 } from '@/lib/calls';
 import { Transaction } from '@mysten/sui/transactions';
 import { PACKAGE_ID } from '@/lib/constants';
@@ -84,11 +85,13 @@ export const useHasUserProfile = (userAddress: string) => {
     queryKey: ['hasUserProfile', userAddress],
     queryFn: async () => {
       const tx = buildHasTrustProfileTx(userAddress);
+      console.log(tx);
+      console.log(userAddress);
       const response = await client.devInspectTransactionBlock({
         sender: userAddress,
         transactionBlock: tx,
       });
-      console.log("response in useHasUserProfile", response);
+      console.log(response);
       // Extract return value from response and convert to boolean
       const returnValue = response.results?.[0]?.returnValues?.[0];
       if (!returnValue) {
@@ -432,7 +435,7 @@ export const useBond = (bondId?: string) => {
 
 // Fix UserProfile hook to properly accept options
 export function useUserProfile(options?: { enabled?: boolean }) {
-  const client = useSuiClient();
+  const suiClient = useSuiClient();
   const currentAccount = useCurrentAccount();
   
   return useQuery<UserProfile>({
@@ -442,79 +445,108 @@ export function useUserProfile(options?: { enabled?: boolean }) {
         throw new Error('Wallet not connected');
       }
       
-     
-        // First, get the profile ID
-        const profileIdTx = new Transaction();
-        profileIdTx.moveCall({
-          target: `${PACKAGE_ID}::trust::get_profile_id`,
-          arguments: [
-            profileIdTx.object(REGISTRY_ID),
-            profileIdTx.pure.address(currentAccount.address)
-          ],
+      try {
+        // Step 1: Get the profile ID
+        const profileId = await getProfileId(REGISTRY_ID, currentAccount.address);
+        
+        // Step 2: Get the profile data
+        return await getProfileData(profileId);
+      } catch (error) {
+        console.error('Error fetching profile data:', error);
+        throw error;
+      }
+    },
+    enabled: options?.enabled !== false && !!currentAccount?.address,
+  });
+}
+
+// Function to get a profile ID from the registry
+async function getProfileId(
+    registryId: string,
+    userAddress: string
+): Promise<string> {
+    console.log(`Looking up profile ID for address ${userAddress}...`);
+    
+    try {
+        // For simplicity in testing, we'll query owned objects directly
+        const objects = await suiClient.getOwnedObjects({
+            owner: userAddress,
+            filter: {
+                StructType: `${PACKAGE_ID}::trust::TrustProfile`
+            },
+            options: {
+                showContent: true,
+            }
         });
         
-        const profileIdResponse = await client.devInspectTransactionBlock({
-          sender: currentAccount.address,
-          transactionBlock: profileIdTx,
-        });
-
-        console.log("profileIdResponse", profileIdResponse);
-        
-        const profileIdValue = profileIdResponse.results?.[0]?.returnValues?.[0][0];
-        const profileId = String(profileIdValue);
-
-        console.log("profileId", profileId);
-        
-        if (!profileId) {
-          throw new Error('Profile not found');
+        if (!objects.data || objects.data.length === 0) {
+            throw new Error(`No profile found for address ${userAddress}`);
         }
         
-        // Then, get profile data
-        const tx = new Transaction();
-        tx.moveCall({
-          target: `${PACKAGE_ID}::trust::get_profile_data`,
-          arguments: [
-            tx.object(profileId),
-          ],
-        });
-
-        console.log("tx", tx);
+        const profileId = objects.data[0].data?.objectId;
+        if (!profileId) {
+            throw new Error(`Invalid profile for address ${userAddress}`);
+        }
         
-        const response = await client.devInspectTransactionBlock({
-          sender: currentAccount.address,
-          transactionBlock: tx,
+        console.log(`Found profile ID: ${profileId}`);
+        return profileId;
+    } catch (error) {
+        console.error("Error finding profile:", error);
+        throw error;
+    }
+}
+
+// Function to get profile data from an ID
+async function getProfileData(profileId: string): Promise<UserProfile> {
+    console.log(`Fetching profile data for ${profileId}...`);
+    
+    try {
+        // For simplicity, we'll fetch the object directly
+        const profile = await suiClient.getObject({
+            id: profileId,
+            options: { showContent: true },
         });
 
         console.log("GET PROFILE DATA RESPONSE", response);
         
-        // Parse results from returnValues - format will be a tuple of values
-        const results = response.results?.[0]?.returnValues;
-
-        console.log("GET PROFILE DATA RESULTS", results);
-        
-        if (!results || !Array.isArray(results)) {
-          throw new Error('Failed to get profile data');
+        if (!profile.data || profile.data.content?.dataType !== 'moveObject') {
+            throw new Error("Invalid profile object");
         }
         
-        // Safe parsing of returned values with proper type conversion
-        return {
-          name: String(results[0]?.[0] || ''),
-          totalBonds: Number(results[1]?.[0] || 0),
-          activeBonds: Number(results[2]?.[0] || 0),
-          withdrawnBonds: Number(results[3]?.[0] || 0),
-          brokenBonds: Number(results[4]?.[0] || 0),
-          moneyInActiveBonds: Number(results[5]?.[0] || 0),
-          moneyInWithdrawnBonds: Number(results[6]?.[0] || 0),
-          moneyInBrokenBonds: Number(results[7]?.[0] || 0),
-          trustScore: Number(results[8]?.[0] || 0),
-          createdAt: Number(results[9]?.[0] || 0),
-          updatedAt: Number(results[10]?.[0] || 0)
+        const fields = profile.data.content.fields as {
+            name: string;
+            total_bonds: string | number;
+            active_bonds: string | number;
+            withdrawn_bonds: string | number;
+            broken_bonds: string | number;
+            money_in_active_bonds: string | number;
+            money_in_withdrawn_bonds: string | number;
+            money_in_broken_bonds: string | number;
+            trust_score: string | number;
+            created_at: string | number;
+            updated_at: string | number;
         };
-      
-    },
-    enabled: options?.enabled,
-  });
+        
+        return {
+            name: fields.name,
+            totalBonds: Number(fields.total_bonds),
+            activeBonds: Number(fields.active_bonds),
+            withdrawnBonds: Number(fields.withdrawn_bonds),
+            brokenBonds: Number(fields.broken_bonds),
+            moneyInActiveBonds: formatBalance(fields.money_in_active_bonds),
+            moneyInWithdrawnBonds: formatBalance(fields.money_in_withdrawn_bonds),
+            moneyInBrokenBonds: formatBalance(fields.money_in_broken_bonds),
+            trustScore: Number(fields.trust_score),
+            createdAt: Number(fields.created_at),
+            updatedAt: Number(fields.updated_at),
+        };
+    } catch (error) {
+        console.error(`Error getting profile data:`, error);
+        throw new Error(`Failed to get profile data: ${error}`);
+    }
 }
+
+// Helper function to properly format balance values
 
 // Find ProfileRegistry (used during initialization)
 export function useProfileRegistry() {
