@@ -14,7 +14,11 @@ import {
   UserBond,
   getSuiClient,
   buildHasTrustProfileTx,
-  suiClient
+  suiClient,
+  getBondById,
+  buildGetBondInfoTx,
+  processBondInfoResult,
+  getAllUserBondsWithDetails
 } from '@/lib/calls';
 import { Transaction } from '@mysten/sui/transactions';
 import { PACKAGE_ID, REGISTRY_ID, BOND_OBJECT_ID } from '@/lib/constants';
@@ -114,82 +118,58 @@ export const useHasUserProfile = (userAddress: string) => {
 /**
  * Hook to fetch user's bonds
  */
-export function useUserBonds(options?: { enabled?: boolean }) {
-  const client = useSuiClient();
-  const currentAccount = useCurrentAccount();
+// export function useUserBonds(options?: { enabled?: boolean }) {
+//   const suiClient = useSuiClient();
+//   const currentAccount = useCurrentAccount();
   
-  return useQuery<Bond[]>({
-    queryKey: ['userBonds', currentAccount?.address],
+//   return useQuery<UserBond[]>({
+//     queryKey: ['userBonds', currentAccount?.address],
+//     queryFn: async () => {
+//       if (!currentAccount?.address) {
+//         throw new Error('Wallet not connected');
+//       }
+      
+//       try {
+//         // Get all bond IDs for the user
+//         const bondIds = await getUserBondIds(suiClient, currentAccount.address);
+//         console.log("bondIds", bondIds);
+//         if (!bondIds.length) {
+//           return [];
+//         }
+        
+//         // Fetch details for each bond
+//         const bonds = await Promise.all(
+//           bondIds.map(id => getBondById(suiClient, id))
+//         );
+        
+//         // Filter out any null results
+//         return bonds.filter(bond => bond !== null) as UserBond[];
+//       } catch (error) {
+//         console.error('Error fetching user bonds:', error);
+//         throw error;
+//       }
+//     },
+//     enabled: options?.enabled !== false && !!currentAccount?.address
+//   });
+// }
+
+/**
+ * Hook to fetch user's bonds from the contract
+ */
+export function useUserBondsFromContract(options?: { enabled?: boolean }) {
+  const suiClient = useSuiClient();
+  const currentAccount = useCurrentAccount();
+
+  return useQuery<UserBond[]>({
+    queryKey: ['userBondsFromContract', currentAccount?.address],
     queryFn: async () => {
       if (!currentAccount?.address) {
         throw new Error('Wallet not connected');
       }
-      
-      try {
-        // Query owned and object references for TrustBond objects
-        const objects = await client.getOwnedObjects({
-          owner: currentAccount.address,
-          filter: {
-            StructType: `${PACKAGE_ID}::trust::TrustBond`
-          },
-          options: {
-            showContent: true,
-          }
-        });
-        
-        if (!objects.data || objects.data.length === 0) {
-          return [] as Bond[];
-        }
-        
-        // Process all bonds
-        const bonds: Bond[] = [];
-        
-        for (const obj of objects.data) {
-          if (!obj.data?.objectId || !obj.data.content) continue;
-          
-          const bondId = obj.data.objectId;
-          
-          // Get full bond data
-          const bond = await client.getObject({
-            id: bondId,
-            options: { showContent: true },
-          });
-          
-          if (bond.data?.content?.dataType !== 'moveObject') continue;
-          
-          // Extract bond fields
-          const fields = bond.data.content.fields as {
-            user_1: string;
-            user_2: string;
-            bond_type: string | number;
-            bond_status: string | number;
-            money_by_user_1: { value: string | number };
-            money_by_user_2: { value: string | number };
-            created_at: string | number;
-          };
-          
-          // Determine if current user is user1 or user2
-          const isUser1 = fields.user_1 === currentAccount.address;
-          
-          bonds.push({
-            bondId,
-            counterPartyAddress: isUser1 ? fields.user_2 : fields.user_1,
-            type: Number(fields.bond_type) === 0 ? 'one-way' : 'two-way',
-            yourStakeAmount: formatBalance(isUser1 ? fields.money_by_user_1.value : fields.money_by_user_2.value),
-            theirStakeAmount: formatBalance(isUser1 ? fields.money_by_user_2.value : fields.money_by_user_1.value),
-            createdAt: Number(fields.created_at),
-            status: Number(fields.bond_status) === 0 ? 'active' : 
-                    Number(fields.bond_status) === 1 ? 'withdrawn' : 'broken'
-          });
-        }
-        
-        return bonds;
-      } catch (error) {
-        console.error('Error fetching user bonds:', error);
-        return [] as Bond[];
-      }
+
+      return getAllUserBondsWithDetails(suiClient, BOND_OBJECT_ID, currentAccount.address);
     },
-    enabled: options?.enabled !== undefined ? options.enabled : !!currentAccount?.address,
+    enabled: options?.enabled !== false && !!currentAccount?.address  
   });
 }
 
@@ -393,51 +373,18 @@ export const useBreakBond = () => {
 /**
  * Hook to get bond details by ID
  */
-export const useBond = (bondId?: string) => {
-  const client = useSuiClient();
+export function useBond(bondId?: string) {
+  const suiClient = useSuiClient();
   
   return useQuery<UserBond | null>({
     queryKey: ['bond', bondId],
     queryFn: async () => {
       if (!bondId) return null;
-      try {
-        const response = await client.getObject({
-          id: bondId,
-          options: { showContent: true },
-        });
-        
-        // Format bond data
-        if (response.data?.content?.dataType === 'moveObject') {
-          const fields = response.data.content.fields as any;
-          const user1 = fields.user_1;
-          const user2 = fields.user_2;
-          const moneyByUser1 = Number(fields.money_by_user_1?.value || 0) / 1_000_000_000;
-          const moneyByUser2 = Number(fields.money_by_user_2?.value || 0) / 1_000_000_000;
-          const bondType = Number(fields.bond_type);
-          const bondStatus = Number(fields.bond_status);
-          
-          return {
-            bondId,
-            user1,
-            user2,
-            yourStakeAmount: moneyByUser1, // Default perspective
-            theirStakeAmount: moneyByUser2,
-            totalAmount: moneyByUser1 + moneyByUser2,
-            createdAt: Number(fields.created_at),
-            status: bondStatus === 0 ? "active" : bondStatus === 1 ? "withdrawn" : "broken",
-            counterPartyAddress: user2, // Default perspective
-            type: bondType === 0 ? "one-way" : "two-way"
-          };
-        }
-        return null;
-      } catch (error) {
-        console.error(`Error fetching bond ${bondId}:`, error);
-        return null;
-      }
+      return getBondById(suiClient, bondId);
     },
-    enabled: Boolean(bondId),
+    enabled: !!bondId
   });
-};
+}
 
 // Fix UserProfile hook to properly accept options
 export function useUserProfile(options?: { enabled?: boolean }) {

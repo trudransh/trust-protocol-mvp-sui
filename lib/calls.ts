@@ -1,6 +1,6 @@
 import { getFullnodeUrl, SuiClient } from '@mysten/sui/client';
 import { Transaction } from '@mysten/sui/transactions';
-import { PACKAGE_ID, REGISTRY_ID, SUINS_REGISTRY } from '@/lib/constants';
+import { PACKAGE_ID, REGISTRY_ID, SUINS_REGISTRY, BOND_OBJECT_ID } from '@/lib/constants';
 import { groupBy } from "./utils";
 import { useSignAndExecuteTransaction } from '@mysten/dapp-kit';
 import { MIST_PER_SUI } from '@mysten/sui/utils';
@@ -258,6 +258,7 @@ export function buildCreateBondTx(
     tx.moveCall({
         target: `${PACKAGE_ID}::trust::create_bond`,
         arguments: [
+            tx.object(BOND_OBJECT_ID),
             tx.object(profileId),
             tx.pure.address(counterpartyAddress),
             coin,
@@ -352,6 +353,74 @@ export function buildHasTrustProfileTx(userAddress: string): Transaction {
   return tx;
 }
 
+// Get bond information by bond ID
+export function buildGetBondInfoTx(bondId: string): Transaction {
+  const tx = new Transaction();
+  
+  tx.moveCall({
+    target: `${PACKAGE_ID}::trust::get_bond_info`,
+    arguments: [
+      tx.object(bondId)
+    ],
+  });
+  
+  return tx;
+}
+
+// Process bond info result from transaction
+export function processBondInfoResult(result: any[]): {
+  user1: string;
+  user2: string;
+  bondType: number;
+  bondStatus: number; 
+  user1Amount: number;
+  user2Amount: number;
+} {
+  if (!result || !result.length) {
+    throw new Error("Invalid bond info result");
+  }
+  
+  return {
+    user1: result[0][0],
+    user2: result[0][1],
+    bondType: Number(result[0][2]),
+    bondStatus: Number(result[0][3]),
+    user1Amount: Number(result[0][4]) / 1_000_000_000, // Convert from MIST to SUI
+    user2Amount: Number(result[0][5]) / 1_000_000_000, // Convert from MIST to SUI
+  };
+}
+
+// Fixed getUserBondIds function 
+export async function getUserBondIds(client: SuiClient, userAddress: string): Promise<string[]> {
+  try {
+    // Query for bond objects owned by the user
+    const { data } = await client.getOwnedObjects({
+      owner: userAddress,
+      filter: {
+        StructType: `${PACKAGE_ID}::trust::TrustBond`
+      },
+      options: { showContent: true }
+    });
+    
+    // Extract just the bond IDs
+    return data.map(obj => obj.data?.objectId || '').filter(id => id !== '');
+  }
+  catch(error) {
+    console.error("Error fetching user bond ids:", error);
+    throw error;
+  }
+}
+
+// Get individual bond by ID
+export async function getBondById(client: SuiClient, bondId: string): Promise<UserBond | null> {
+  try {
+    return await getBondInfo(client, bondId);
+  } catch (error) {
+    console.error(`Error fetching bond by ID ${bondId}:`, error);
+    throw error;
+  }
+}
+
 // HELPER FUNCTIONS
 
 // Helper to extract created object IDs from transaction effects
@@ -402,3 +471,85 @@ export function adjustBondPerspective(bond: UserBond, userAddress: string): User
 
 // Add a utility to create a default SuiClient instance
 export const suiClient = getSuiClient('testnet');
+
+// Get bond IDs directly from the contract using get_user_bond_ids
+export async function getBondIdsFromContract(
+  client: SuiClient, 
+  userBondsId: string, 
+  userAddress: string
+): Promise<string[]> {
+  console.log(`Getting bond IDs from contract for user ${userAddress}...`);
+  
+  try {
+    // Build transaction to call get_user_bond_ids
+    const tx = new Transaction();
+    tx.moveCall({
+      target: `${PACKAGE_ID}::trust::get_user_bond_ids`,
+      arguments: [
+        tx.object(userBondsId),
+        tx.pure.address(userAddress),
+      ],
+    });
+    
+    // Execute as a dry-run to get the return value
+    const result = await client.devInspectTransactionBlock({
+      sender: userAddress, // Any address can call this read-only function
+      transactionBlock: tx,
+    });
+    
+    if (!result.results || !result.results[0]?.returnValues) {
+      throw new Error("No result from get_user_bond_ids call");
+    }
+    
+    const returnValue = result.results[0].returnValues[0];
+    // In Sui, a vector<ID> is returned as an array of strings (object IDs)
+    if (!Array.isArray(returnValue[0])) {
+      throw new Error("Unexpected return format from get_user_bond_ids");
+    }
+    
+    const bondIds = returnValue[0];
+    console.log(`Bond IDs for user ${userAddress}:`, bondIds);
+    return bondIds.map(id => String(id));  // Convert each number to string
+  } catch (error) {
+    console.error(`Error getting bond IDs from contract for ${userAddress}:`, error);
+    throw error;
+  }
+}
+
+// Helper to find a created object of a specific type in transaction results
+export function findCreatedObjectId(
+  objectChanges: any[] | undefined, 
+  objectType: string
+): string | undefined {
+  if (!objectChanges) return undefined;
+  
+  for (const change of objectChanges) {
+    if (
+      change.type === 'created' && 
+      change.objectType.includes(objectType)
+    ) {
+      return change.objectId;
+    }
+  }
+  
+  return undefined;
+}
+
+// Get all bonds with details using the contract's get_user_bond_ids
+export async function getAllUserBondsWithDetails(
+  client: SuiClient, 
+  userBondsId: string, 
+  userAddress: string
+): Promise<UserBond[]> {
+  // First get all bond IDs
+  const bondIds = await getBondIdsFromContract(client, userBondsId, userAddress);
+  
+  // Then get details for each bond
+  const bondPromises = bondIds.map(bondId => getBondInfo(client, bondId));
+  const bonds = await Promise.all(bondPromises);
+  
+  // Filter out any null results and adjust perspective
+  return bonds
+    .filter((bond): bond is UserBond => bond !== null)
+    .map(bond => adjustBondPerspective(bond, userAddress));
+}
