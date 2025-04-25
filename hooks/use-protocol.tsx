@@ -77,6 +77,9 @@ export const useUserData = (address?: string) => {
 
 export const useHasUserProfile = (userAddress: string) => {
   const client = useSuiClient();
+
+  console.log("userAddress", userAddress);
+  console.log("client", client);
   return useQuery<boolean>({  
     queryKey: ['hasUserProfile', userAddress],
     queryFn: async () => {
@@ -85,11 +88,13 @@ export const useHasUserProfile = (userAddress: string) => {
         sender: userAddress,
         transactionBlock: tx,
       });
+      console.log("response in useHasUserProfile", response);
       // Extract return value from response and convert to boolean
       const returnValue = response.results?.[0]?.returnValues?.[0];
       if (!returnValue) {
         return false;
       }
+      console.log("returnValue in useHasUserProfile", returnValue);
       // Convert to string first to safely handle any type
       const stringValue = String(returnValue[0]);
       return stringValue === '1' || stringValue === 'true';
@@ -375,59 +380,6 @@ export const useBreakBond = () => {
   });
 };
 
-/**
- * Hook to check if a user already has a profile
- */
-export function useHasProfile() {
-  const client = useSuiClient();
-  const currentAccount = useCurrentAccount();
-  
-  const result = useQuery({
-    queryKey: ['hasProfile', currentAccount?.address, REGISTRY_ID],
-    queryFn: async () => {
-      if (!currentAccount?.address) return false;
-      if (!REGISTRY_ID) {
-        console.warn("Registry ID not configured. Please set NEXT_PUBLIC_REGISTRY_ID in your environment.");
-        return false;
-      }
-      
-      try {
-        const tx = new Transaction();
-        tx.moveCall({
-          target: `${PACKAGE_ID}::trust::has_trust_profile`,
-          arguments: [
-            tx.object(REGISTRY_ID),
-            tx.pure.address(currentAccount.address)
-          ],
-        });
-        
-        const response = await client.devInspectTransactionBlock({
-          sender: currentAccount.address,
-          transactionBlock: tx,
-        });
-        
-        const returnValue = response.results?.[0]?.returnValues?.[0];
-        if (!returnValue) {
-          return false;
-        }
-        
-        // Convert to string first to safely handle any type
-        const stringValue = String(returnValue[0]);
-        return stringValue === '1' || stringValue === 'true';
-      } catch (error) {
-        console.error('Error checking profile:', error);
-        return false;
-      }
-    },
-    enabled: !!currentAccount?.address && !!REGISTRY_ID,
-  });
-
-  return {
-    data: result.data,
-    isLoading: result.isLoading,
-    refetch: result.refetch
-  };
-}
 
 /**
  * Hook to get bond details by ID
@@ -490,7 +442,7 @@ export function useUserProfile(options?: { enabled?: boolean }) {
         throw new Error('Wallet not connected');
       }
       
-      try {
+     
         // First, get the profile ID
         const profileIdTx = new Transaction();
         profileIdTx.moveCall({
@@ -505,9 +457,13 @@ export function useUserProfile(options?: { enabled?: boolean }) {
           sender: currentAccount.address,
           transactionBlock: profileIdTx,
         });
+
+        console.log("profileIdResponse", profileIdResponse);
         
         const profileIdValue = profileIdResponse.results?.[0]?.returnValues?.[0][0];
         const profileId = String(profileIdValue);
+
+        console.log("profileId", profileId);
         
         if (!profileId) {
           throw new Error('Profile not found');
@@ -521,14 +477,20 @@ export function useUserProfile(options?: { enabled?: boolean }) {
             tx.object(profileId),
           ],
         });
+
+        console.log("tx", tx);
         
         const response = await client.devInspectTransactionBlock({
           sender: currentAccount.address,
           transactionBlock: tx,
         });
+
+        console.log("GET PROFILE DATA RESPONSE", response);
         
         // Parse results from returnValues - format will be a tuple of values
         const results = response.results?.[0]?.returnValues;
+
+        console.log("GET PROFILE DATA RESULTS", results);
         
         if (!results || !Array.isArray(results)) {
           throw new Error('Failed to get profile data');
@@ -548,10 +510,7 @@ export function useUserProfile(options?: { enabled?: boolean }) {
           createdAt: Number(results[9]?.[0] || 0),
           updatedAt: Number(results[10]?.[0] || 0)
         };
-      } catch (error) {
-        console.error('Error fetching profile data:', error);
-        throw error;
-      }
+      
     },
     enabled: options?.enabled,
   });

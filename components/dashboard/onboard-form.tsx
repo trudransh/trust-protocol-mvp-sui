@@ -1,12 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-
-import { CONTRACT_ADDRESSES, NULL_ADDRESS, ValidChainType } from "@/lib/constants";
-
-import { USER_FACTORY_ABI } from "@/abi/user-factory";
-import { showTransactionToast } from "../showTransactionToast";
+import { motion } from "framer-motion";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -33,10 +28,11 @@ export const OnboardForm = ({ onClose }: { onClose: () => void }) => {
     try {
       // Pass displayName directly to createProfile
       const txDigest = await createProfile(displayName);
+      console.log("Profile created successfully, txDigest:", txDigest);
       toast.success("Profile created successfully!");
-      onClose();
+      onClose(); // This will trigger the refetch in the parent component
     } catch (error: any) {
-      console.error(error);
+      console.error("Error creating profile:", error);
       toast.error(error.message || "Failed to create profile");
     } finally {
       setIsLoading(false);
@@ -44,10 +40,20 @@ export const OnboardForm = ({ onClose }: { onClose: () => void }) => {
   };
   
   return (
-    <>
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      {/* Blurred background overlay */}
+      <div className="absolute inset-0 bg-black/30 backdrop-blur-md" />
+      
+      {/* Loading modal shown while creating profile */}
       {isLoading && <BondLoadingModal />}
       
-      <div className="w-full max-w-md mx-auto bg-white rounded-xl shadow-lg p-8">
+      {/* Modal content */}
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.9 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.9 }}
+        className="w-full max-w-md mx-auto bg-white rounded-xl shadow-lg p-8 relative z-10"
+      >
         <h2 className="text-2xl font-bold mb-6 text-center text-blue-600">
           Join Trust Protocol
         </h2>
@@ -66,6 +72,7 @@ export const OnboardForm = ({ onClose }: { onClose: () => void }) => {
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
               className="w-full"
+              autoFocus
             />
           </div>
           
@@ -77,7 +84,7 @@ export const OnboardForm = ({ onClose }: { onClose: () => void }) => {
             Create Profile
           </Button>
         </form>
-      </div>
-    </>
+      </motion.div>
+    </div>
   );
 };

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useCurrentAccount } from "@mysten/dapp-kit";
 import { AnimatePresence, motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
@@ -26,25 +26,19 @@ import {
   UnlinkIcon,
 } from "lucide-react";
 
-// Sui-specific wallet hook (commented out)
-// import { useWallet } from "@suiet/wallet-kit";
-// Placeholder for Sui-specific hooks (commented out)
-// import { useSuiUserWallet, useSuiUserDetails } from "@/hooks/use-sui-protocol";
 // Utility functions
 import { formatDecimal, formatNumber, formatAddress, truncateText } from "@/lib/utils";
 // Components
 import { OnboardForm } from "@/components/dashboard/onboard-form";
 import { BondModal } from "@/components/bond-modal";
-import { AnimatedWalletConnect } from "@/components/animated-connect-button";
 import { BondLoadingModal } from "@/components/bond-loading-modal";
 
-import { useHasProfile, useUserProfile, useUserBonds,} from "@/hooks/use-protocol";
-// import { NULL_ADDRESS } from "@/lib/constants";
+// Important: Use the correct hook name - useHasUserProfile, not useHasProfile
+import { useHasUserProfile, useUserProfile, useUserBonds,useProfileId } from "@/hooks/use-protocol";
 import { formatAmount } from "@/lib/utils";
-import truncateAddress from "@/lib/truncateAddress";
 
 // Sui-specific address truncation
-function truncateSuiAddress(address: string) {
+function truncateSuiAddress(address) {
   if (!address) return "";
   return address.slice(0, 6) + "..." + address.slice(-4);
 }
@@ -52,93 +46,287 @@ function truncateSuiAddress(address: string) {
 // Define NULL_ADDRESS for Sui
 const NULL_ADDRESS = "0x0";
 
-// UserResolver component (static version)
-function UserResolver({ address }: { address: string }) {
-  // const { data: userWallet, isLoading } = useSuiUserWallet(address);
-  // if (isLoading) {
-  //   return <span>Loading...</span>;
-  // }
-  // return <span>{truncateSuiAddress(userWallet ?? NULL_ADDRESS)}</span>;
+// UserResolver component
+function UserResolver({ address }) {
   return <span>{truncateSuiAddress(address)}</span>;
 }
 
-// Static mock data
-const staticUserDetails = {
-  totalAmount: "1000000",
-  totalWithdrawnAmount: "200000",
-  totalBrokenAmount: "100000",
-  totalActiveBonds: 2,
-  totalBrokenBonds: 1,
-  totalWithdrawnBonds: 1,
-  bondsDetails: [
-    {
-      counterPartyAddress: "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
-      type: "two-way",
-      yourStakeAmount: "500000",
-      theirStakeAmount: "500000",
-      createdAt: "1697059200", // Example timestamp (Oct 12, 2023)
-      status: "active",
-      bondAddress: "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
-    },
-    {
-      counterPartyAddress: "0x0987654321fedcba0987654321fedcba0987654321fedcba0987654321fedcba",
-      type: "one-way",
-      yourStakeAmount: "300000",
-      theirStakeAmount: "0",
-      createdAt: "1694476800", // Example timestamp (Sep 12, 2023)
-      status: "active",
-      bondAddress: "0xfedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321",
-    },
-  ],
-};
-
 export default function Dashboard() {
+  console.log("Dashboard component mounting...");
   const currentAccount = useCurrentAccount();
   const address = currentAccount?.address || NULL_ADDRESS;
+  console.log("Current account address:", address);
   
-  // Data fetching hooks
-  const { data: hasProfile, isLoading: profileCheckLoading, refetch: refetchProfileCheck } = useHasProfile();
-  const { data: userProfile, isLoading: profileLoading, refetch: refetchUserProfile } = useUserProfile({
-    enabled: !!hasProfile
-  });
-  const { data: userBonds, isLoading: bondsLoading, refetch: refetchUserBonds } = useUserBonds({
-    enabled: !!hasProfile
-  });
-  
-  // Modal states
-  const [selectedBondId, setSelectedBondId] = useState<string | undefined>(undefined);
-  const [isBondModalOpen, setIsBondModalOpen] = useState(false);
-  const [bondModalType, setBondModalType] = useState<'create' | 'withdraw' | 'break' | 'stake'>('create');
+  // App state - using useRef to avoid rerender cycles
+  const initializingRef = useRef(true);
+  const [isLoading, setIsLoading] = useState(true);
+  const [dashboardReady, setDashboardReady] = useState(false);
   const [showOnboardModal, setShowOnboardModal] = useState(false);
+  const profileCheckAttemptsRef = useRef(0);
+  const maxAttempts = 3;
+  const timeoutRef = useRef(null);
   
-  // Refetch all data after operations
+  // Bond modal states
+  const [selectedBondId, setSelectedBondId] = useState(undefined);
+  const [isBondModalOpen, setIsBondModalOpen] = useState(false);
+  const [bondModalType, setBondModalType] = useState('create');
+  
+  // Data fetching hooks with the CORRECT hook name - useHasUserProfile
+  const { 
+    data: hasProfile, 
+    isLoading: profileCheckLoading, 
+    refetch: refetchProfileCheck 
+  } = useHasUserProfile(address);
+  
+  console.log("useHasUserProfile result:", { hasProfile, profileCheckLoading });
+  
+  const { 
+    data: userProfile, 
+    isLoading: profileLoading, 
+    refetch: refetchUserProfile,
+    isError: profileError,
+    error: profileErrorDetails
+  } = useUserProfile({
+    enabled: hasProfile === true
+  });
+
+  const {
+    data: profileId,
+    isLoading: profileIdLoading,
+    refetch: refetchProfileId
+  } = useProfileId();
+
+  console.log("profileId", profileId);
+  
+  console.log("useUserProfile result:", { 
+    userProfile, 
+    profileLoading,
+    profileError,
+    errorDetails: profileErrorDetails
+  });
+  
+  const { 
+    data: userBonds, 
+    isLoading: bondsLoading, 
+    refetch: refetchUserBonds 
+  } = useUserBonds({
+    enabled: hasProfile === true
+  });
+  
+  console.log("useUserBonds result:", { userBonds, bondsLoading });
+  
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    };
+  }, []);
+  
+  // Set timeout to prevent infinite loading
+  useEffect(() => {
+    if (isLoading && !timeoutRef.current) {
+      timeoutRef.current = setTimeout(() => {
+        console.log("Loading timeout reached after 15 seconds");
+        
+        // Check if we're still loading
+        if (isLoading) {
+          console.log("Still loading after timeout, showing error state");
+          setIsLoading(false);
+          
+          // If hasProfile is true but no profile data, show onboarding
+          if (hasProfile === true && !userProfile) {
+            console.log("Profile exists but data failed to load, showing onboarding as fallback");
+            setShowOnboardModal(true);
+          }
+        }
+        
+        timeoutRef.current = null;
+      }, 15000); // 15 second timeout
+    }
+    
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+    };
+  }, [isLoading, hasProfile, userProfile]);
+  
+  // Process profile check and data loading
+  useEffect(() => {
+    // Skip first render
+    if (initializingRef.current) {
+      initializingRef.current = false;
+      return;
+    }
+    
+    console.log("Profile check state:", {
+      profileCheckLoading,
+      hasProfile,
+      userProfile,
+      profileLoading,
+      bondsLoading,
+      profileError,
+      attempts: profileCheckAttemptsRef.current
+    });
+    
+    const manageProfileState = async () => {
+      // If profile check is loading, wait
+      if (profileCheckLoading) {
+        console.log("Profile check is still loading");
+        return;
+      }
+      
+      // Profile check complete
+      console.log("Profile check completed. Result:", hasProfile);
+      
+      if (hasProfile === true) {
+        console.log("User has profile, checking data loading state");
+        
+        // If data is loading, wait
+        if (profileLoading || bondsLoading) {
+          console.log("Profile or bonds data still loading");
+          setIsLoading(true);
+          setDashboardReady(false);
+          return;
+        }
+        
+        // Data loading complete
+        if (userProfile) {
+          console.log("Profile data loaded successfully:", userProfile);
+          setIsLoading(false);
+          setDashboardReady(true);
+          setShowOnboardModal(false);
+        } else {
+          console.log("Profile check says user has profile, but data is missing");
+          
+          // Try refetching if within attempt limits
+          if (profileCheckAttemptsRef.current < maxAttempts) {
+            profileCheckAttemptsRef.current++;
+            console.log(`Attempt ${profileCheckAttemptsRef.current}/${maxAttempts}: Refetching profile data`);
+            try {
+              await refetchUserProfile();
+            } catch (err) {
+              console.error("Error refetching profile data:", err);
+            }
+          } else {
+            console.log("Max attempts reached. Showing onboarding as fallback");
+            setIsLoading(false);
+            setDashboardReady(false);
+            setShowOnboardModal(true);
+          }
+        }
+      } else if (hasProfile === false) {
+        console.log("User does not have a profile, showing onboarding modal");
+        setIsLoading(false);
+        setDashboardReady(false);
+        setShowOnboardModal(true);
+      } else {
+        console.log("hasProfile is undefined, attempting to refetch");
+        
+        if (profileCheckAttemptsRef.current < maxAttempts) {
+          profileCheckAttemptsRef.current++;
+          console.log(`Attempt ${profileCheckAttemptsRef.current}/${maxAttempts}: Refetching profile check`);
+          try {
+            await refetchProfileCheck();
+          } catch (err) {
+            console.error("Error refetching profile check:", err);
+          }
+        } else {
+          console.log("Max attempts reached with undefined profile check. Showing onboarding.");
+          setIsLoading(false);
+          setDashboardReady(false);
+          setShowOnboardModal(true);
+        }
+      }
+    };
+    
+    manageProfileState();
+  }, [
+    hasProfile, 
+    profileCheckLoading, 
+    userProfile, 
+    profileLoading, 
+    bondsLoading, 
+    profileError,
+    refetchProfileCheck,
+    refetchUserProfile
+  ]);
+  
+  // Refetch all data - with improved error handling
   const refetchData = async () => {
-    await Promise.all([
-      refetchProfileCheck(),
-      refetchUserProfile(),
-      refetchUserBonds()
-    ]);
+    console.log("Refreshing all data...");
+    setIsLoading(true);
+    setDashboardReady(false);
+    profileCheckAttemptsRef.current = 0;
+    
+    try {
+      // First check if profile exists
+      console.log("Checking if profile exists...");
+      const profileCheckResult = await refetchProfileCheck();
+      console.log("Profile check result:", profileCheckResult);
+      
+      if (profileCheckResult.data === true) {
+        console.log("Profile confirmed to exist, fetching profile data...");
+        
+        try {
+          const profileResult = await refetchUserProfile();
+          console.log("Profile data result:", profileResult);
+          
+          if (profileResult.data) {
+            console.log("Profile data loaded successfully");
+            
+            // Also refetch bonds but don't block on it
+            refetchUserBonds()
+              .then(result => console.log("Bonds data refreshed:", result))
+              .catch(err => console.error("Error refreshing bonds:", err));
+            
+            setDashboardReady(true);
+            setShowOnboardModal(false);
+          } else {
+            console.log("Profile data failed to load");
+            setDashboardReady(false);
+          }
+        } catch (err) {
+          console.error("Error fetching profile data:", err);
+          setDashboardReady(false);
+        }
+      } else {
+        console.log("No profile found or profile check failed");
+        setShowOnboardModal(true);
+        setDashboardReady(false);
+      }
+    } catch (error) {
+      console.error("Error in refetchData:", error);
+      setDashboardReady(false);
+    } finally {
+      setIsLoading(false);
+    }
   };
   
-  // Show onboarding if user has no profile
-  useEffect(() => {
-    if (!profileCheckLoading && hasProfile === false) {
-      setShowOnboardModal(true);
-    } else {
-      setShowOnboardModal(false);
-    }
-  }, [hasProfile, profileCheckLoading]);
+  // Handle onboarding completion
+  const handleOnboardingComplete = async () => {
+    console.log("Onboarding completed, refreshing dashboard...");
+    await refetchData();
+  };
   
-  // Loading state
-  if (profileCheckLoading || (hasProfile && (profileLoading || bondsLoading))) {
-    return <BondLoadingModal />;
-  }
-  
-  // Calculate dashboard metrics
+  // Calculate dashboard metrics safely
   const totalValueLocked = userProfile ? userProfile.moneyInActiveBonds || 0 : 0;
   const totalWithdrawnAmount = userProfile ? userProfile.moneyInWithdrawnBonds || 0 : 0;
   const totalBrokenAmount = userProfile ? userProfile.moneyInBrokenBonds || 0 : 0;
   const totalAmount = totalValueLocked + totalWithdrawnAmount + totalBrokenAmount;
+  
+  console.log("Rendering dashboard with states:", { 
+    isLoading, 
+    dashboardReady, 
+    showOnboardModal 
+  });
+  
+  // Show loading screen during initial load or data fetching
+  if (isLoading || !dashboardReady) {
+    console.log("Showing loading modal. Loading state:", { isLoading, dashboardReady });
+    return <BondLoadingModal />;
+  }
   
   return (
     <div className="min-h-screen bg-gradient-to-r from-[#cdffd8] to-[#94b9ff]">
@@ -243,6 +431,7 @@ export default function Dashboard() {
           </div>
           <Button
             onClick={() => {
+              console.log("Opening bond creation modal");
               setIsBondModalOpen(true);
               setBondModalType('create');
               setSelectedBondId(undefined);
@@ -307,7 +496,7 @@ export default function Dashboard() {
                           </div>
                         </TableCell>
                         <TableCell>
-                          {new Date(Number(bond.createdAt)).toLocaleDateString()}
+                          {new Date(Number(bond.createdAt) * 1000).toLocaleDateString()}
                         </TableCell>
                         <TableCell>
                           <span
@@ -328,6 +517,7 @@ export default function Dashboard() {
                                 size="sm"
                                 className="gap-1 text-green-600 border-green-200 hover:bg-green-50"
                                 onClick={() => {
+                                  console.log("Opening stake modal for bond:", bond.bondId);
                                   setIsBondModalOpen(true);
                                   setSelectedBondId(bond.bondId);
                                   setBondModalType('stake');
@@ -341,6 +531,7 @@ export default function Dashboard() {
                                 size="sm"
                                 className="gap-1 text-blue-600 border-blue-200 hover:bg-blue-50"
                                 onClick={() => {
+                                  console.log("Opening withdraw modal for bond:", bond.bondId);
                                   setIsBondModalOpen(true);
                                   setSelectedBondId(bond.bondId);
                                   setBondModalType('withdraw');
@@ -354,6 +545,7 @@ export default function Dashboard() {
                                 size="sm"
                                 className="gap-1 text-red-600 border-red-200 hover:bg-red-50"
                                 onClick={() => {
+                                  console.log("Opening break modal for bond:", bond.bondId);
                                   setIsBondModalOpen(true);
                                   setSelectedBondId(bond.bondId);
                                   setBondModalType('break');
@@ -386,17 +578,19 @@ export default function Dashboard() {
         {showOnboardModal && (
           <OnboardForm
             key="onboard-modal"
-            onClose={() => refetchData()}
+            onClose={handleOnboardingComplete}
           />
         )}
 
         <BondModal
           isOpen={isBondModalOpen}
           onClose={() => {
+            console.log("Bond modal closing, will refresh data");
             setIsBondModalOpen(false);
-            refetchData();
+            // Small delay to ensure state updates
+            setTimeout(() => refetchData(), 100);
           }}
-          type={bondModalType}
+          type={bondModalType as 'create' | 'withdraw' | 'break' | 'stake'}
           bondId={selectedBondId}
         />
       </AnimatePresence>
