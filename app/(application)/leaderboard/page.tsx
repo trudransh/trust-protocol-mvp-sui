@@ -16,11 +16,11 @@ export default function LeaderboardPage() {
 
   // Mock data
   const leaderboardData = Array.from({ length: 50 }, (_, i) => ({
-    ens: `user${i + 1}.eth`,
+    ens: `user${i + 1}.sui`,
     address: `0x${Math.random().toString(16).slice(2, 22)}`,
     reputation: Math.floor(Math.random() * 1000),
     bonds: Math.floor(Math.random() * 50),
-    tvl: (Math.random() * 100).toFixed(2) + " ETH",
+    tvl: (Math.random() * 100).toFixed(2) + " SUI",
     activity: ["High", "Medium", "Low"][Math.floor(Math.random() * 3)],
     streak: Math.floor(Math.random() * 30),
   }))

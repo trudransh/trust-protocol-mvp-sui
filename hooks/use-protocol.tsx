@@ -15,7 +15,6 @@ import {
   getSuiClient,
   buildHasTrustProfileTx,
   suiClient,
-  getBondById,
   buildGetBondInfoTx,
   processBondInfoResult,
   getAllUserBondsWithDetails
@@ -118,40 +117,23 @@ export const useHasUserProfile = (userAddress: string) => {
 /**
  * Hook to fetch user's bonds
  */
-// export function useUserBonds(options?: { enabled?: boolean }) {
-//   const suiClient = useSuiClient();
-//   const currentAccount = useCurrentAccount();
+export function useUserBonds(options?: { enabled?: boolean }) {
+  const suiClient = useSuiClient();
+  const currentAccount = useCurrentAccount();
   
-//   return useQuery<UserBond[]>({
-//     queryKey: ['userBonds', currentAccount?.address],
-//     queryFn: async () => {
-//       if (!currentAccount?.address) {
-//         throw new Error('Wallet not connected');
-//       }
+  return useQuery<UserBond[]>({
+    queryKey: ['userBonds', currentAccount?.address],
+    queryFn: async () => {
+      if (!currentAccount?.address) {
+        throw new Error('Wallet not connected');
+      }
       
-//       try {
-//         // Get all bond IDs for the user
-//         const bondIds = await getUserBondIds(suiClient, currentAccount.address);
-//         console.log("bondIds", bondIds);
-//         if (!bondIds.length) {
-//           return [];
-//         }
-        
-//         // Fetch details for each bond
-//         const bonds = await Promise.all(
-//           bondIds.map(id => getBondById(suiClient, id))
-//         );
-        
-//         // Filter out any null results
-//         return bonds.filter(bond => bond !== null) as UserBond[];
-//       } catch (error) {
-//         console.error('Error fetching user bonds:', error);
-//         throw error;
-//       }
-//     },
-//     enabled: options?.enabled !== false && !!currentAccount?.address
-//   });
-// }
+      // Use the new implementation
+      return getAllUserBondsWithDetails(suiClient, BOND_OBJECT_ID, currentAccount.address);
+    },
+    enabled: options?.enabled !== false && !!currentAccount?.address
+  });
+}
 
 /**
  * Hook to fetch user's bonds from the contract
@@ -373,18 +355,7 @@ export const useBreakBond = () => {
 /**
  * Hook to get bond details by ID
  */
-export function useBond(bondId?: string) {
-  const suiClient = useSuiClient();
-  
-  return useQuery<UserBond | null>({
-    queryKey: ['bond', bondId],
-    queryFn: async () => {
-      if (!bondId) return null;
-      return getBondById(suiClient, bondId);
-    },
-    enabled: !!bondId
-  });
-}
+
 
 // Fix UserProfile hook to properly accept options
 export function useUserProfile(options?: { enabled?: boolean }) {

@@ -177,48 +177,85 @@ export async function getUserBonds(client: SuiClient, userAddress: string): Prom
 }
 
 // Get bond info
-export async function getBondInfo(client: SuiClient, bondId: string): Promise<UserBond | null> {
-    console.log(`Getting info for bond ${bondId}`);
-    
+async function getBondInfo( client: SuiClient, bondId: string): Promise<{
+    user1: string;
+    user2: string;
+    bondType: number;
+    bondStatus: number;
+    moneyByUser1: number;
+    moneyByUser2: number;
+}> {
     try {
         const bond = await client.getObject({
             id: bondId,
-            options: { showContent: true },
+            options: { showContent: true, showDisplay: true },
         });
         
         if (bond.data?.content?.dataType !== 'moveObject') {
-            return null;
+            throw new Error("Invalid bond object");
         }
         
+        console.log("Raw bond data:", JSON.stringify(bond.data.content, null, 2));
+        
+        // Type assertion for TrustBond fields
         const fields = bond.data.content.fields as any;
         
-        const user1 = fields.user_1;
-        const user2 = fields.user_2;
-        const moneyByUser1 = Number(fields.money_by_user_1?.value || 0) / 1_000_000_000;
-        const moneyByUser2 = Number(fields.money_by_user_2?.value || 0) / 1_000_000_000;
-        const totalAmount = moneyByUser1 + moneyByUser2;
-        const bondType = Number(fields.bond_type);
-        const bondStatus = Number(fields.bond_status);
-        const createdAt = Number(fields.created_at);
+        // Extract balance values - handle potential nesting correctly
+        let moneyByUser1 = 0;
+        let moneyByUser2 = 0;
         
-        return {
-            bondId,
-            user1,
-            user2,
-            yourStakeAmount: moneyByUser1, // Default perspective
-            theirStakeAmount: moneyByUser2,
-            totalAmount,
-            createdAt,
-            status: BOND_STATUS[bondStatus as keyof typeof BOND_STATUS],
-            counterPartyAddress: user2, // Default perspective
-            type: BOND_TYPE[bondType as keyof typeof BOND_TYPE]
+        // In Sui Move, Balance<SUI> objects are often structured differently
+        // Check all possible formats
+        if (fields.money_by_user_1) {
+            if (typeof fields.money_by_user_1 === 'object') {
+                if ('value' in fields.money_by_user_1) {
+                    moneyByUser1 = Number(fields.money_by_user_1.value);
+                } else if ('fields' in fields.money_by_user_1 && 'value' in fields.money_by_user_1.fields) {
+                    moneyByUser1 = Number(fields.money_by_user_1.fields.value);
+                }
+            } else if (typeof fields.money_by_user_1 === 'string' || typeof fields.money_by_user_1 === 'number') {
+                moneyByUser1 = Number(fields.money_by_user_1);
+            }
+        }
+        
+        if (fields.money_by_user_2) {
+            if (typeof fields.money_by_user_2 === 'object') {
+                if ('value' in fields.money_by_user_2) {
+                    moneyByUser2 = Number(fields.money_by_user_2.value);
+                } else if ('fields' in fields.money_by_user_2 && 'value' in fields.money_by_user_2.fields) {
+                    moneyByUser2 = Number(fields.money_by_user_2.fields.value);
+                }
+            } else if (typeof fields.money_by_user_2 === 'string' || typeof fields.money_by_user_2 === 'number') {
+                moneyByUser2 = Number(fields.money_by_user_2);
+            }
+        }
+        
+        // Format values
+        const bondInfo = {
+            user1: fields.user_1,
+            user2: fields.user_2,
+            bondType: Number(fields.bond_type),
+            bondStatus: Number(fields.bond_status),
+            moneyByUser1: formatBalance(moneyByUser1),
+            moneyByUser2: formatBalance(moneyByUser2),
         };
+        
+        console.log(`Bond info: 
+  User1: ${bondInfo.user1} (${bondInfo.moneyByUser1} SUI)
+  User2: ${bondInfo.user2} (${bondInfo.moneyByUser2} SUI)
+  Type: ${bondInfo.bondType} (${bondInfo.bondType === 0 ? 'one-way' : 'two-way'})
+  Status: ${bondInfo.bondStatus} (${bondInfo.bondStatus === 0 ? 'active' : bondInfo.bondStatus === 1 ? 'withdrawn' : 'broken'})
+  Total Value: ${bondInfo.moneyByUser1 + bondInfo.moneyByUser2} SUI`);
+        
+        return bondInfo;
     } catch (error) {
-        console.error(`Error getting bond info for ${bondId}:`, error);
         throw error;
     }
 }
 
+const formatBalance = (balance: string | number): number => {
+    return Number(balance) / Number(MIST_PER_SUI);
+  };
 // TRANSACTION BUILDING FUNCTIONS
 
 // Create a trust profile transaction
@@ -391,35 +428,17 @@ export function processBondInfoResult(result: any[]): {
 }
 
 // Fixed getUserBondIds function 
-export async function getUserBondIds(client: SuiClient, userAddress: string): Promise<string[]> {
-  try {
-    // Query for bond objects owned by the user
-    const { data } = await client.getOwnedObjects({
-      owner: userAddress,
-      filter: {
-        StructType: `${PACKAGE_ID}::trust::TrustBond`
-      },
-      options: { showContent: true }
-    });
-    
-    // Extract just the bond IDs
-    return data.map(obj => obj.data?.objectId || '').filter(id => id !== '');
-  }
-  catch(error) {
-    console.error("Error fetching user bond ids:", error);
-    throw error;
-  }
-}
+
 
 // Get individual bond by ID
-export async function getBondById(client: SuiClient, bondId: string): Promise<UserBond | null> {
-  try {
-    return await getBondInfo(client, bondId);
-  } catch (error) {
-    console.error(`Error fetching bond by ID ${bondId}:`, error);
-    throw error;
-  }
-}
+// export async function getBondById(client: SuiClient, bondId: string): Promise<UserBond | null> {
+//   try {
+//     return await getBondInfo(client, bondId);
+//   } catch (error) {
+//     console.error(`Error fetching bond by ID ${bondId}:`, error);
+//     throw error;
+//   }
+// }
 
 // HELPER FUNCTIONS
 
@@ -473,47 +492,98 @@ export function adjustBondPerspective(bond: UserBond, userAddress: string): User
 export const suiClient = getSuiClient('testnet');
 
 // Get bond IDs directly from the contract using get_user_bond_ids
-export async function getBondIdsFromContract(
-  client: SuiClient, 
-  userBondsId: string, 
-  userAddress: string
-): Promise<string[]> {
-  console.log(`Getting bond IDs from contract for user ${userAddress}...`);
-  
-  try {
-    // Build transaction to call get_user_bond_ids
-    const tx = new Transaction();
-    tx.moveCall({
-      target: `${PACKAGE_ID}::trust::get_user_bond_ids`,
-      arguments: [
-        tx.object(userBondsId),
-        tx.pure.address(userAddress),
-      ],
-    });
-    
-    // Execute as a dry-run to get the return value
-    const result = await client.devInspectTransactionBlock({
-      sender: userAddress, // Any address can call this read-only function
-      transactionBlock: tx,
-    });
-    
-    if (!result.results || !result.results[0]?.returnValues) {
-      throw new Error("No result from get_user_bond_ids call");
+async function getUserBondIds(client: SuiClient, userBondsId: string, userAddress: string): Promise<string[]> {
+    console.log(`Getting bond IDs for user ${userAddress}...`);
+    try {
+        const tx = new Transaction();
+        tx.moveCall({
+            target: `${PACKAGE_ID}::trust::get_user_bond_ids`,
+            arguments: [
+                tx.object(userBondsId),
+                tx.pure.address(userAddress),
+            ],
+        });
+        
+        const result = await client.devInspectTransactionBlock({
+            sender: userAddress,
+            transactionBlock: tx,
+        });
+
+        console.log("Raw result:", JSON.stringify(result.results?.[0]?.returnValues));
+        
+        if (!result.results || !result.results[0]?.returnValues) {
+            throw new Error("No result from get_user_bond_ids call");
+        }
+        
+        const returnValue = result.results[0].returnValues[0];
+        const bondIdBytes = returnValue[0]; // [3, 245, 80, ...]
+
+        if (bondIdBytes.length === 0) {
+            return [];
+        }
+
+        // Parse ULEB128 length
+        const [length, offset] = readULEB128(bondIdBytes);
+        
+        // Extract each 32-byte ID
+        const bondIds = [];
+        for (let i = 0; i < length; i++) {
+            const start = offset + i * 32;
+            const end = start + 32;
+            const idBytes = bondIdBytes.slice(start, end);
+            if (idBytes.length !== 32) {
+                throw new Error(`Invalid ID length at index ${i}: expected 32 bytes, got ${idBytes.length}`);
+            }
+            bondIds.push(formatSuiObjectId(idBytes));
+        }
+        return bondIds;
+    } catch (error) {
+        console.error(`Error getting bond IDs for ${userAddress}:`, error);
+        throw error;
     }
+}
+
+// function formatSuiObjectId(bytes: number[]): string {
+//     // Check if the first byte might be a length indicator and remove it if needed
+//     const idBytes = bytes.length === 33 ? bytes.slice(1) : bytes;
     
-    const returnValue = result.results[0].returnValues[0];
-    // In Sui, a vector<ID> is returned as an array of strings (object IDs)
-    if (!Array.isArray(returnValue[0])) {
-      throw new Error("Unexpected return format from get_user_bond_ids");
+//     // Format as hex string with proper padding
+//     let hexString = "";
+//     for (const byte of idBytes) {
+//         hexString += byte.toString(16).padStart(2, '0');
+//     }
+    
+//     return `0x${hexString}`;
+// }
+
+function readULEB128(bytes: number[], start: number = 0): [number, number] {
+    let result = 0;
+    let shift = 0;
+    let index = start;
+    while (true) {
+        if (index >= bytes.length) {
+            throw new Error("ULEB128 decoding error: unexpected end of bytes");
+        }
+        const byte = bytes[index];
+        result |= (byte & 0x7f) << shift;
+        shift += 7;
+        index++;
+        if ((byte & 0x80) === 0) {
+            break;
+        }
     }
-    
-    const bondIds = returnValue[0];
-    console.log(`Bond IDs for user ${userAddress}:`, bondIds);
-    return bondIds.map(id => String(id));  // Convert each number to string
-  } catch (error) {
-    console.error(`Error getting bond IDs from contract for ${userAddress}:`, error);
-    throw error;
-  }
+    return [result, index];
+}
+
+function formatSuiObjectId(bytes: number[]): string {
+    if (bytes.length !== 32) {
+        throw new Error(`Invalid object ID length: expected 32 bytes, got ${bytes.length}`);
+    }
+    let hexString = "";
+    for (const byte of bytes) {
+        hexString += byte.toString(16).padStart(2, "0");
+    }
+    return `0x${hexString}`;
 }
 
 // Helper to find a created object of a specific type in transaction results
@@ -542,14 +612,31 @@ export async function getAllUserBondsWithDetails(
   userAddress: string
 ): Promise<UserBond[]> {
   // First get all bond IDs
-  const bondIds = await getBondIdsFromContract(client, userBondsId, userAddress);
+  const bondIds = await getUserBondIds(client, userBondsId, userAddress);
+  const validBonds = [];
   
   // Then get details for each bond
-  const bondPromises = bondIds.map(bondId => getBondInfo(client, bondId));
-  const bonds = await Promise.all(bondPromises);
+  for (const bondId of bondIds) {
+    try {
+      const bondInfo = await getBondInfo(client, bondId);
+      // Create a UserBond object from bondInfo
+      const isUser1 = userAddress === bondInfo.user1;
+      validBonds.push({
+        bondId,
+        user1: bondInfo.user1,
+        user2: bondInfo.user2,
+        yourStakeAmount: isUser1 ? bondInfo.moneyByUser1 : bondInfo.moneyByUser2,
+        theirStakeAmount: isUser1 ? bondInfo.moneyByUser2 : bondInfo.moneyByUser1,
+        totalAmount: bondInfo.moneyByUser1 + bondInfo.moneyByUser2,
+        createdAt: 0, // Set default or fetch from bond object if available
+        status: BOND_STATUS[bondInfo.bondStatus as keyof typeof BOND_STATUS],
+        counterPartyAddress: isUser1 ? bondInfo.user2 : bondInfo.user1,
+        type: BOND_TYPE[bondInfo.bondType as keyof typeof BOND_TYPE]
+      });
+    } catch (error:any) {
+      console.warn(`Skipping invalid bond ID ${bondId}: ${error.message}`);
+    }
+  }
   
-  // Filter out any null results and adjust perspective
-  return bonds
-    .filter((bond): bond is UserBond => bond !== null)
-    .map(bond => adjustBondPerspective(bond, userAddress));
+  return validBonds;
 }

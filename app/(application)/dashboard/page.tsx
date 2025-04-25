@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useCurrentAccount } from "@mysten/dapp-kit";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -24,7 +24,6 @@ import {
   LinkIcon,
   UnlinkIcon,
   CircleIcon,
-  ChevronDownIcon,
   CircleCheckIcon,
   XCircleIcon,
 } from "lucide-react";
@@ -37,7 +36,7 @@ import { BondModal } from "@/components/bond-modal";
 import { BondLoadingModal } from "@/components/bond-loading-modal";
 
 // Hooks
-import { useUserProfile, useUserBonds } from "@/hooks/use-protocol";
+import { useUserProfile, useUserBondsFromContract } from "@/hooks/use-protocol";
 
 // Format amounts with SUI token
 const formatSui = (amount: number) => {
@@ -58,31 +57,33 @@ function UserResolver({ address }: { address: string | undefined }) {
 // Bond status badge component
 function BondStatusBadge({ status }: { status: string }) {
   let bgColor, textColor, icon;
-  
+
   switch (status) {
-    case 'active':
-      bgColor = 'bg-green-100';
-      textColor = 'text-green-800';
+    case "active":
+      bgColor = "bg-green-100";
+      textColor = "text-green-800";
       icon = <CircleCheckIcon className="w-3 h-3 mr-1" />;
       break;
-    case 'withdrawn':
-      bgColor = 'bg-blue-100';
-      textColor = 'text-blue-800';
+    case "withdrawn":
+      bgColor = "bg-blue-100";
+      textColor = "text-blue-800";
       icon = <MinusIcon className="w-3 h-3 mr-1" />;
       break;
-    case 'broken':
-      bgColor = 'bg-red-100';
-      textColor = 'text-red-800';
+    case "broken":
+      bgColor = "bg-red-100";
+      textColor = "text-red-800";
       icon = <XCircleIcon className="w-3 h-3 mr-1" />;
       break;
     default:
-      bgColor = 'bg-gray-100';
-      textColor = 'text-gray-800';
+      bgColor = "bg-gray-100";
+      textColor = "text-gray-800";
       icon = <CircleIcon className="w-3 h-3 mr-1" />;
   }
-  
+
   return (
-    <span className={`px-2 py-1 rounded-full text-xs ${bgColor} ${textColor} flex items-center inline-flex`}>
+    <span
+      className={`px-2 py-1 rounded-full text-xs ${bgColor} ${textColor} flex items-center inline-flex`}
+    >
       {icon}
       {status.charAt(0).toUpperCase() + status.slice(1)}
     </span>
@@ -95,63 +96,80 @@ export default function Dashboard() {
   const address = currentAccount?.address;
 
   // Data fetching hooks
-  const { 
-    data: userProfileResult, 
-    isLoading: profileLoading, 
-    error: profileError, 
-    refetch: refetchUserProfile 
+  const {
+    data: userProfileResult,
+    isLoading: profileLoading,
+    error: profileError,
+    refetch: refetchUserProfile,
   } = useUserProfile();
 
   // Access the profile data from the result
   const profileExists = userProfileResult?.exists || false;
   const userProfile = userProfileResult?.data || null;
 
-  // Log profile data for debugging
+  // Log profile data and state changes for debugging
   useEffect(() => {
+    console.log("Current state:", {
+      address,
+      profileLoading,
+      profileExists,
+      profileError: profileError?.message,
+      userProfile,
+    });
     if (userProfileResult) {
       console.log("User profile result:", userProfileResult);
       if (userProfile) {
         console.log("Profile data successfully loaded:", userProfile);
       }
     }
-  }, [userProfileResult, userProfile]);
-
-  // Fetch bonds only when a profile exists
-  const { 
-    data: userBonds, 
-    isLoading: bondsLoading, 
-    refetch: refetchUserBonds 
-  } = useUserBonds({
-    enabled: profileExists === true
-  });
-
-
-  console.log("userBonds", userBonds);
+  }, [address, profileLoading, profileExists, profileError, userProfileResult, userProfile]);
 
   // Bond filtering and sorting
   const [bondStatusFilter, setBondStatusFilter] = useState<string | null>(null);
-  
+
+  const { data: bonds, isLoading: bondsLoading, isError: bondsError, error: bondsErrorDetails } = useUserBondsFromContract();
+
+  // Log bond data for debugging
+  useEffect(() => {
+    console.log("Bonds state:", {
+      bonds,
+      bondsLoading,
+      bondsError,
+      bondsErrorDetails: bondsErrorDetails?.message,
+    });
+  }, [bonds, bondsLoading, bondsError, bondsErrorDetails]);
+
+  // Timeout to detect stuck loading state
+  useEffect(() => {
+    if (profileLoading || bondsLoading) {
+      const timer = setTimeout(() => {
+        console.warn("Loading timeout after 10 seconds. Profile loading:", profileLoading, "Bonds loading:", bondsLoading);
+      }, 10000);
+      return () => clearTimeout(timer);
+    }
+  }, [profileLoading, bondsLoading]);
+
   // Filtered bonds based on status
-  const filteredBonds = bondStatusFilter 
-    ? userBonds?.filter(bond => bond.status === bondStatusFilter) 
-    : userBonds;
-  
+  const filteredBonds = bondStatusFilter
+    ? bonds?.filter((bond) => bond.status === bondStatusFilter)
+    : bonds;
+
   // Count bonds by status
-  const activeBondsCount = userBonds?.filter(bond => bond.status === 'active').length || 0;
-  const brokenBondsCount = userBonds?.filter(bond => bond.status === 'broken').length || 0;
-  const withdrawnBondsCount = userBonds?.filter(bond => bond.status === 'withdrawn').length || 0;
+  const activeBondsCount = bonds?.filter((bond) => bond.status === "active").length || 0;
+  const brokenBondsCount = bonds?.filter((bond) => bond.status === "broken").length || 0;
+  const withdrawnBondsCount = bonds?.filter((bond) => bond.status === "withdrawn").length || 0;
 
   // Bond modal states
   const [selectedBondId, setSelectedBondId] = useState<string | undefined>(undefined);
   const [isBondModalOpen, setIsBondModalOpen] = useState(false);
-  const [bondModalType, setBondModalType] = useState<'create' | 'stake' | 'withdraw' | 'break'>('create');
+  const [bondModalType, setBondModalType] = useState<"create" | "stake" | "withdraw" | "break">("create");
 
   // Handle onboarding completion
   const handleOnboardingComplete = async () => {
     console.log("Onboarding completed, refreshing dashboard...");
     await refetchUserProfile();
     if (profileExists === true) {
-      await refetchUserBonds();
+      console.log("Refetching bonds");
     }
   };
 
@@ -161,19 +179,19 @@ export default function Dashboard() {
   const totalBrokenAmount = userProfile ? userProfile.moneyInBrokenBonds || 0 : 0;
   const totalAmount = totalValueLocked + totalWithdrawnAmount + totalBrokenAmount;
 
-  // Loading state
-  if (profileLoading || (profileExists === true && bondsLoading)) {
-    console.log("Showing loading modal");
+  // Loading state: Show loader if address is missing, profile is loading, or bonds are loading for an existing profile
+  if (!address || profileLoading || (profileExists === true && bondsLoading)) {
+    console.log("Showing loading modal", { address, profileLoading, profileExists, bondsLoading });
     return <BondLoadingModal />;
   }
 
-  // Error or no profile
+  // Error or no profile: Show onboarding form
   if (profileError || profileExists === false) {
-    console.log("Showing onboarding modal due to error or no profile");
+    console.log("Showing onboarding modal due to:", { profileError: profileError?.message, profileExists });
     return <OnboardForm onClose={handleOnboardingComplete} />;
   }
 
-  // Dashboard content - only render when we have profile data
+  // Dashboard content: Render when profile data is available
   if (profileExists === true && userProfile) {
     console.log("Rendering dashboard with profile data");
     return (
@@ -267,10 +285,12 @@ export default function Dashboard() {
                   Based on your Sui chain bond activity
                 </div>
                 <div className="text-xs text-muted-foreground mt-1">
-                  Profile created: {new Date(Number(userProfile.createdAt) * 1000).toLocaleDateString()}
+                  Profile created:{" "}
+                  {new Date(Number(userProfile.createdAt) * 1000).toLocaleDateString()}
                 </div>
                 <div className="text-xs text-muted-foreground mt-1">
-                  Last updated: {new Date(Number(userProfile.updatedAt) * 1000).toLocaleDateString()}
+                  Last updated:{" "}
+                  {new Date(Number(userProfile.updatedAt) * 1000).toLocaleDateString()}
                 </div>
               </CardContent>
             </Card>
@@ -290,7 +310,7 @@ export default function Dashboard() {
               onClick={() => {
                 console.log("Opening bond creation modal");
                 setIsBondModalOpen(true);
-                setBondModalType('create');
+                setBondModalType("create");
                 setSelectedBondId(undefined);
               }}
               className="h-12 px-6 text-base whitespace-nowrap w-full sm:w-auto bg-[#0066FF] hover:bg-[#0052CC] text-white"
@@ -306,37 +326,37 @@ export default function Dashboard() {
               <CardHeader className="border-b">
                 <div className="flex justify-between items-center">
                   <h2 className="text-xl font-semibold">
-                    All Bonds ({userBonds?.length || 0})
+                    All Bonds ({bonds?.length || 0})
                   </h2>
                   <div className="flex gap-2">
-                    <Button 
+                    <Button
                       variant={bondStatusFilter === null ? "default" : "outline"}
                       size="sm"
                       onClick={() => setBondStatusFilter(null)}
                     >
-                      All ({userBonds?.length || 0})
+                      All ({bonds?.length || 0})
                     </Button>
-                    <Button 
-                      variant={bondStatusFilter === 'active' ? "default" : "outline"}
+                    <Button
+                      variant={bondStatusFilter === "active" ? "default" : "outline"}
                       size="sm"
                       className="bg-green-100 text-green-800 hover:bg-green-200 border-green-200"
-                      onClick={() => setBondStatusFilter('active')}
+                      onClick={() => setBondStatusFilter("active")}
                     >
                       Active ({activeBondsCount})
                     </Button>
-                    <Button 
-                      variant={bondStatusFilter === 'withdrawn' ? "default" : "outline"}
+                    <Button
+                      variant={bondStatusFilter === "withdrawn" ? "default" : "outline"}
                       size="sm"
                       className="bg-blue-100 text-blue-800 hover:bg-blue-200 border-blue-200"
-                      onClick={() => setBondStatusFilter('withdrawn')}
+                      onClick={() => setBondStatusFilter("withdrawn")}
                     >
                       Withdrawn ({withdrawnBondsCount})
                     </Button>
-                    <Button 
-                      variant={bondStatusFilter === 'broken' ? "default" : "outline"}
+                    <Button
+                      variant={bondStatusFilter === "broken" ? "default" : "outline"}
                       size="sm"
                       className="bg-red-100 text-red-800 hover:bg-red-200 border-red-200"
-                      onClick={() => setBondStatusFilter('broken')}
+                      onClick={() => setBondStatusFilter("broken")}
                     >
                       Broken ({brokenBondsCount})
                     </Button>
@@ -369,9 +389,9 @@ export default function Dashboard() {
                           <TableCell>
                             <span
                               className={`px-2 py-1 rounded-full text-xs ${
-                                bond.type === 'two-way' 
-                                  ? 'bg-green-100 text-green-800' 
-                                  : 'bg-yellow-100 text-yellow-800'
+                                bond.type === "two-way"
+                                  ? "bg-green-100 text-green-800"
+                                  : "bg-yellow-100 text-yellow-800"
                               }`}
                             >
                               {bond.type}
@@ -396,7 +416,7 @@ export default function Dashboard() {
                             <BondStatusBadge status={bond.status} />
                           </TableCell>
                           <TableCell className="text-right">
-                            {bond.status === 'active' ? (
+                            {bond.status === "active" ? (
                               <div className="flex gap-2 justify-end">
                                 <Button
                                   variant="outline"
@@ -406,7 +426,7 @@ export default function Dashboard() {
                                     console.log("Opening stake modal for bond:", bond.bondId);
                                     setIsBondModalOpen(true);
                                     setSelectedBondId(bond.bondId);
-                                    setBondModalType('stake');
+                                    setBondModalType("stake");
                                   }}
                                 >
                                   <PlusIcon className="w-4 h-4" />
@@ -420,7 +440,7 @@ export default function Dashboard() {
                                     console.log("Opening withdraw modal for bond:", bond.bondId);
                                     setIsBondModalOpen(true);
                                     setSelectedBondId(bond.bondId);
-                                    setBondModalType('withdraw');
+                                    setBondModalType("withdraw");
                                   }}
                                 >
                                   <MinusIcon className="w-4 h-4" />
@@ -434,7 +454,7 @@ export default function Dashboard() {
                                     console.log("Opening break modal for bond:", bond.bondId);
                                     setIsBondModalOpen(true);
                                     setSelectedBondId(bond.bondId);
-                                    setBondModalType('break');
+                                    setBondModalType("break");
                                   }}
                                 >
                                   <UnlinkIcon className="w-4 h-4" />
@@ -448,8 +468,8 @@ export default function Dashboard() {
                     ) : (
                       <TableRow>
                         <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                          {bondStatusFilter 
-                            ? `No ${bondStatusFilter} bonds found.` 
+                          {bondStatusFilter
+                            ? `No ${bondStatusFilter} bonds found.`
                             : "No bonds found. Create a new bond to get started."}
                         </TableCell>
                       </TableRow>
@@ -471,7 +491,7 @@ export default function Dashboard() {
               setTimeout(() => {
                 refetchUserProfile();
                 if (profileExists === true) {
-                  refetchUserBonds();
+                  console.log("Refetching bonds");
                 }
               }, 100);
             }}
